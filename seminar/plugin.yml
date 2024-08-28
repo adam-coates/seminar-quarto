@@ -1,0 +1,9 @@
+name: RevealSeminar
+script: [seminar.js]
+config:
+  seminar:
+    server: http://localhost:4433',
+    room: "someroomname"
+    hash: "$2a$05$SnN8T20RKLkdTtEtZngFLef4bHeO5RKdv8MvlzelFHicbfKVsL9eC"
+    autoJoin: true
+    logger: barfoo

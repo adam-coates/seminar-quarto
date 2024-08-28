@@ -1,0 +1,61 @@
+---
+title: Quarto and seminar plugin
+format: 
+  revealjs:
+    self-contained: true
+    revealjs-plugins:
+        - seminar
+    include-after-body: custom.js
+    menu:
+      themes: false
+      transitions: false
+      markers: true
+      hideMissingTitles: true
+      custom:
+        - title: "Broadcast"
+          icon: '<i class="fas fa-rss"></i>'
+          content: foobar
+---
+
+
+## Seminar
+
+- The seminar plugin allows to use a socket.io server so that the audience can follow along with the presentation on their own device
+
+
+- Use the menu to sign into become an admin
+
+
+- Remember to change the server, room name and generate hash 
+
+- The password used to generate the hash can be used to log in as an admin.
+
+
+## Step 1 
+
+- Make changes to the plugin in seminar 
+
+
+## Step 2 
+
+- make slides
+
+- Run `quarto render`
+
+or `quarto preview`
+
+
+## Step 3
+
+`pip install beautifulsoup4 requests`
+
+run the postprocess.py script 
+
+`python postprocess.py`
+
+
+
+
+
+
+
