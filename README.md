@@ -14,7 +14,7 @@ Based off [Seminar](https://github.com/rajgoel/reveal.js-plugins/tree/master/sem
 
 ## Quarto makes it hard to put custom `js` in specific places
 
-- This is inherently stops some usability, however again this is by design to prevent the quarto rendering scripts from breaking entirely
+- This inherently stops some usability, however again this is by design to prevent the quarto rendering scripts from breaking entirely
 
 - This however means that extremely custom things can be hard without a postprocessing script
 
