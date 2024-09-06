@@ -14,9 +14,9 @@ Based off [Seminar](https://github.com/rajgoel/reveal.js-plugins/tree/master/sem
 
 ## Quarto makes it hard to put custom `js` in specific places
 
-- This inherently stops some usability, however again this is by design to prevent the quarto rendering scripts from breaking entirely
+- This inherently stops some usability, however again this is by design to prevent the rendering of quarto documents from breaking entirely
 
-- This however means that extremely custom things can be hard without a postprocessing script
+- This however means that custom things can be hard to accomplish (like the [Seminar](https://github.com/rajgoel/reveal.js-plugins/tree/master/seminar) plugin) without a postprocessing script
 
 ## Steps:
 
@@ -48,3 +48,7 @@ format:
 3. `pip install beautifulsoup4 requests`
 
 4. run `python postprocess.py`
+
+---
+
+Do not change the locations of `foobar` and `barfoo` these are necessary to inject some custom `html` and/or `javascript` later during the postprocessing.
