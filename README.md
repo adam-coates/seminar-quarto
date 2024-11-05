@@ -51,4 +51,8 @@ format:
 
 ---
 
-Do not change the locations of `foobar` and `barfoo` these are necessary to inject some custom `html` and/or `javascript` later during the postprocessing.
+Do not change `foobar` and `barfoo` (located inside `./seminar/plugin.yml`) these are necessary to inject some custom `html` and/or `javascript` later during the postprocessing.
+
+---
+
+- The user can edit the fields 1. server 2. room and 3. hash in the file `./seminar/plugin.yml` [plugin.yml](https://github.com/adam-coates/seminar-quarto/blob/master/seminar/plugin.yml). These should be changed so that it works with your `socket.io` server. [An example socket.io server](https://github.com/rajgoel/seminar)
