@@ -45,14 +45,22 @@ format:
 
 2. `quarto render`
 
-3. `pip install beautifulsoup4 requests`
+(If not using the `_quarto.yml` file then manually after `quarto render`:
 
-4. run `python postprocess.py`
-
----
-
-Do not change `foobar` and `barfoo` (located inside `./seminar/plugin.yml`) these are necessary to inject some custom `html` and/or `javascript` later during the postprocessing.
+3. run `uv run postprocess.py`
 
 ---
 
-- The user can edit the fields 1. server 2. room and 3. hash in the file `./seminar/plugin.yml` [plugin.yml](https://github.com/adam-coates/seminar-quarto/blob/master/seminar/plugin.yml). These should be changed so that it works with your `socket.io` server. [An example socket.io server](https://github.com/rajgoel/seminar)
+Do not change `foobar` (located inside `index.qmd`) and `barfoo` (located inside `./seminar/plugin.yml`) these are necessary to inject some custom `html` and/or `javascript` later during the postprocessing.
+
+---
+
+- The user can edit the fields 
+
+1. server 
+
+2. room and 
+
+3. hash in the file `./seminar/plugin.yml` 
+
+[plugin.yml](https://github.com/adam-coates/seminar-quarto/blob/master/seminar/plugin.yml). These should be changed so that it works with your `socket.io` server. [An example socket.io server](https://github.com/rajgoel/seminar)
