@@ -1,0 +1,4 @@
+project:
+  type: default
+  post-render: 
+    - uv run postprocess.py
