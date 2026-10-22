@@ -863,7 +863,12 @@ end
 
 -- classic results: one stacked bar per statement, one segment per point. The
 -- dataset labels go through the chart plugin's CSV, which splits on commas.
-local function likert_results_html(id, height, show_question)
+-- Text sizes for this chart, in px. The extension's chart default (30, set in
+-- _extension.yml for poll bars) is far too big for statements and a legend of
+-- five to eleven points: Chart.js then drops statement labels it cannot fit.
+local LIKERT_CHART_FONT = 16
+
+local function likert_results_html(id, height, show_question, orientation)
   local likert = likerts[id]
   local eid = html_escape(id)
   local colours = likert_colours(likert)
@@ -889,17 +894,30 @@ local function likert_results_html(id, height, show_question)
     if line ~= "" then lines[#lines + 1] = line end
     return #lines > 1 and lines or text
   end
+  -- horizontal (default): a bar per statement, statements down the left.
+  -- vertical: a column per statement, statements along the bottom, wrapped
+  -- narrower since they share the width.
+  local vertical = orientation == "vertical"
   local labels = {}
-  for i, statement in ipairs(likert.statements) do labels[i] = wrap(statement, 24) end
+  for i, statement in ipairs(likert.statements) do
+    labels[i] = wrap(statement, vertical and 18 or 30)
+  end
+  local font = { size = LIKERT_CHART_FONT }
+  -- every statement labelled (autoSkip off), the counts never slanted
+  local category = { stacked = true, ticks = { autoSkip = false, maxRotation = 0, font = font } }
+  local value = { stacked = true, beginAtZero = true, ticks = { precision = 0, maxRotation = 0, font = font } }
   local chart = {
     data = { labels = labels, datasets = datasets },
     options = {
-      indexAxis = "y",
-      plugins = { legend = { display = true, position = "bottom" } },
-      scales = {
-        x = { stacked = true, beginAtZero = true, ticks = { precision = 0 } },
-        y = { stacked = true },
+      indexAxis = vertical and "x" or "y",
+      plugins = {
+        legend = {
+          display = true,
+          position = "bottom",
+          labels = { font = font, boxWidth = LIKERT_CHART_FONT, padding = 12 },
+        },
       },
+      scales = vertical and { x = category, y = value } or { x = value, y = category },
       responsive = false, -- sized by livepoll.js, as for polls
       maintainAspectRatio = false,
     },
@@ -1050,10 +1068,17 @@ local function generate_div(el)
       return nil
     end
     if likerts[id] then
+      local orientation = el.attributes["orientation"]
+      if orientation ~= nil and orientation ~= "horizontal" and orientation ~= "vertical" then
+        quarto.log.warning("livepoll: .poll-results for '" .. id .. "': orientation should be horizontal or vertical, got '"
+          .. orientation .. "'; using horizontal.")
+        orientation = nil
+      end
       return pandoc.RawBlock("html", likert_results_html(
         id,
         el.attributes["height"] or "360px",
-        truthy(el.attributes["show-question"]) == true
+        truthy(el.attributes["show-question"]) == true,
+        orientation
       ))
     end
     if not polls[id] then
