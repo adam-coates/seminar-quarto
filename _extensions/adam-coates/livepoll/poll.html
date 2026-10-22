@@ -229,6 +229,55 @@
         color: #c0392b;
         opacity: 1;
       }
+
+      /* likert: one row of points per statement */
+      .likert-statement {
+        margin-bottom: 22px;
+      }
+
+      .likert-statement .statement {
+        margin-bottom: 10px;
+        color: #333;
+        font-size: 17px;
+        line-height: 1.4;
+      }
+
+      /* worded points stack, so "Strongly disagree" fits on a phone */
+      .likert-points {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .likert-points button {
+        padding: 9px 12px;
+        font-size: 15px;
+        border-radius: 10px;
+      }
+
+      /* numbers sit in an even grid; the column count is set per scale */
+      .likert-points.numeric {
+        display: grid;
+        grid-template-columns: repeat(var(--cols, 6), minmax(0, 1fr));
+      }
+
+      .likert-points.numeric button {
+        padding: 10px 0;
+        font-size: 16px;
+      }
+
+      .likert-anchors {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        color: #777;
+        font-size: 13px;
+      }
+
+      .likert-submit {
+        width: 100%;
+        margin-top: 6px;
+      }
     </style>
   </head>
   <body>
@@ -276,6 +325,7 @@
       let config = null;
       let polls = {};
       let clouds = {};
+      let likerts = {};
       let socket;
       let joined = false;
       let activePollId = null;
@@ -544,6 +594,102 @@
         renderMyWords(cloudId);
       }
 
+      /* ------------------------------------------------------ likert */
+
+      function displayLikert(likertId) {
+        const likert = likerts[likertId];
+        if (!likert) return;
+
+        activePollId = likertId;
+        voted = hasVoted(likertId);
+        const answers = likert.statements.map(() => null);
+        const numeric = likert.numeric;
+        const anchors = likert.anchors || [];
+        const n = likert.labels.length;
+        const cols = n <= 6 ? n : Math.ceil(n / 2); // 0-10 -> 6 + 5
+
+        const rows = likert.statements
+          .map((statement, s) => {
+            const label = likert.single ? "" : `<div class="statement">${statement}</div>`;
+            const points = likert.labels
+              .map((l, p) => `<button type="button" data-s="${s}" data-p="${p}">${l}</button>`)
+              .join("");
+            const ends =
+              numeric && (anchors[0] || anchors[1])
+                ? `<div class="likert-anchors"><span>${anchors[0] || ""}</span><span>${anchors[1] || ""}</span></div>`
+                : "";
+            return `<div class="likert-statement">${label}
+              <div class="likert-points${numeric ? " numeric" : ""}" style="--cols:${cols}">${points}</div>${ends}</div>`;
+          })
+          .join("");
+
+        pollContent.innerHTML = `
+          <div class="poll-question">${likert.question}</div>
+          ${rows}
+          <button type="button" class="likert-submit" id="likertSubmit" disabled>Submit</button>`;
+
+        if (voted) {
+          disableButtons();
+          updateStatus("You already answered this one.", "waiting");
+          pollContent.innerHTML += `
+            <p style="margin-top:20px;color:#666;text-align:center;">
+              ✅ Your answers have already been recorded.
+            </p>`;
+          return;
+        }
+
+        pollContent.querySelectorAll(".likert-points button").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const s = Number(btn.dataset.s);
+            answers[s] = Number(btn.dataset.p);
+            btn.parentElement
+              .querySelectorAll("button")
+              .forEach((b) => b.classList.toggle("selected", b === btn));
+            const left = answers.filter((a) => a === null).length;
+            document.getElementById("likertSubmit").disabled = left > 0;
+            updateStatus(
+              left > 0 ? `${left} left to answer` : "Ready to submit",
+              "connected"
+            );
+          });
+        });
+        document
+          .getElementById("likertSubmit")
+          .addEventListener("click", () => submitLikert(likertId, answers));
+        updateStatus(
+          likert.statements.length > 1 ? "Rate each statement, then submit" : "Pick one, then submit",
+          "connected"
+        );
+      }
+
+      function submitLikert(likertId, answers) {
+        if (!joined) {
+          alert("Not connected yet. Please wait...");
+          return;
+        }
+        if (hasVoted(likertId)) {
+          disableButtons();
+          return;
+        }
+        socket.emit("message", {
+          venue: config.url,
+          name: config.room,
+          hash: config.hash,
+          recipient: true,
+          content: {
+            sender: "likert-plugin",
+            recipient: true,
+            type: "answer",
+            likert: likertId,
+            answers: answers,
+          },
+        });
+        disableButtons();
+        voted = true;
+        markVoted(likertId, JSON.stringify(answers));
+        updateStatus("Thanks — your answers were sent", "connected");
+      }
+
       function disableButtons() {
         const buttons = pollContent.querySelectorAll("button");
         buttons.forEach((btn) => (btn.disabled = true));
@@ -647,6 +793,8 @@
           if (activePollId === pollControl.pollId) return; // duplicate
           if (clouds[pollControl.pollId]) {
             displayCloud(pollControl.pollId);
+          } else if (likerts[pollControl.pollId]) {
+            displayLikert(pollControl.pollId);
           } else {
             displayPoll(pollControl.pollId);
           }
@@ -746,6 +894,7 @@
         };
         polls = cfg.polls || {};
         clouds = cfg.clouds || {};
+        likerts = cfg.likerts || {};
 
         if (cfg.title) document.getElementById("pollTitle").textContent = cfg.title;
         updateStatus("Connecting to server...", "connecting");

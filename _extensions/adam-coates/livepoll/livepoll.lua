@@ -374,6 +374,165 @@ local function collect_cloud(el)
   return nil
 end
 
+----------------------------------------------------------------- likert
+
+-- A rating scale: one or more statements, each rated on the same scale.
+--
+--     ::: {.likert #feedback scale="agree-5"}
+--     - The pace was right
+--     - The examples helped
+--     :::
+--
+-- scale= is agree-5 (the default), agree-7, or a numeric range such as 0-10
+-- or 1-5 (up to 11 points), whose ends low= and high= name. labels="a|b|c"
+-- gives the points yourself. Without a list the question is the one statement.
+
+local LIKERT_SCALES = {
+  ["agree-5"] = { "Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree" },
+  ["agree-7"] = {
+    "Strongly disagree", "Disagree", "Somewhat disagree", "Neutral",
+    "Somewhat agree", "Agree", "Strongly agree",
+  },
+}
+local LIKERT_MAX_POINTS = 11
+
+local likerts = {}      -- id -> { question, statements, labels, numeric, anchors, ... }
+local likert_order = {}
+
+local function record_likert(id, likert)
+  if not likerts[id] then table.insert(likert_order, id) end
+  likerts[id] = likert
+end
+
+-- (labels, numeric, anchors) from a likert div's attributes.
+local function likert_scale(attrs, id)
+  local labels, numeric = nil, false
+  if attrs.labels ~= nil then
+    labels = {}
+    for part in (attrs.labels .. "|"):gmatch("([^|]*)|") do
+      part = trim(part)
+      if part ~= "" then table.insert(labels, part) end
+    end
+    if #labels < 2 or #labels > LIKERT_MAX_POINTS then
+      quarto.log.warning("livepoll: likert '" .. id .. "' labels= needs 2 to "
+        .. LIKERT_MAX_POINTS .. " labels separated by |; using agree-5.")
+      labels = nil
+    end
+  else
+    local scale = trim(attrs.scale or "agree-5")
+    local lo, hi = scale:match("^(%d+)%s*%-%s*(%d+)$")
+    if LIKERT_SCALES[scale] then
+      labels = LIKERT_SCALES[scale]
+    elseif lo then
+      lo, hi = tonumber(lo), tonumber(hi)
+      if hi - lo + 1 < 2 or hi - lo + 1 > LIKERT_MAX_POINTS then
+        quarto.log.warning("livepoll: likert '" .. id .. "' scale=\"" .. scale .. "\" must span 2 to "
+          .. LIKERT_MAX_POINTS .. " points (e.g. 0-10, 1-5); using agree-5.")
+      else
+        labels, numeric = {}, true
+        for i = lo, hi do table.insert(labels, tostring(i)) end
+      end
+    else
+      quarto.log.warning("livepoll: likert '" .. id .. "' has unknown scale=\"" .. scale
+        .. "\" (use agree-5, agree-7, a range like 0-10, or labels=\"a|b|c\"); using agree-5.")
+    end
+  end
+  labels = labels or LIKERT_SCALES["agree-5"]
+
+  local anchors = nil
+  if attrs.low ~= nil or attrs.high ~= nil then
+    if numeric then
+      anchors = { trim(attrs.low or ""), trim(attrs.high or "") }
+    else
+      quarto.log.warning("livepoll: likert '" .. id .. "': low= and high= only apply to numeric scales; ignored.")
+    end
+  end
+  return labels, numeric, anchors
+end
+
+-- Pass 1. Returns the div with its id filled in when it had none, so pass 2
+-- finds the same id without having to count likerts the same way twice.
+local function collect_likert(el)
+  if not el.classes:includes("likert") then return nil end
+
+  collect_seq = collect_seq + 1
+  local id = el.identifier
+  if id == nil or id == "" then id = "likert-" .. collect_seq end
+
+  local question = el.attributes["question"]
+  local q_source = question and "attribute" or nil
+  local statements = {}
+  for _, block in ipairs(el.content) do
+    if block.t == "BulletList" or block.t == "OrderedList" then
+      for _, item in ipairs(block.content) do
+        local first = item[1]
+        local text = first and first.content and inlines_text(first.content) or ""
+        if text ~= "" then table.insert(statements, text) end
+      end
+    elseif (block.t == "Para" or block.t == "Plain" or block.t == "Header") and not question then
+      question = inlines_text(block.content)
+      q_source = "paragraph"
+    end
+  end
+  if not question then q_source = "heading" end
+  question = question or last_header or id
+
+  -- no list: the question is the one statement, and is not repeated as a label
+  local single = #statements == 0
+  if single then statements = { question } end
+
+  local labels, numeric, anchors = likert_scale(el.attributes, id)
+
+  local show = truthy(el.attributes["show-question"])
+  -- as for polls: printed unless the slide heading already says it (a single
+  -- statement is the question, so it gets no label of its own either way)
+  if show == nil then show = (q_source ~= "heading") end
+
+  local results = el.attributes["results"]
+  if results ~= nil and results ~= "live" and results ~= "hidden" then
+    quarto.log.warning("livepoll: likert '" .. id .. "' results should be live or hidden, got '" .. results .. "'.")
+    results = nil
+  end
+
+  record_likert(id, {
+    question = question,
+    statements = statements,
+    labels = labels,
+    numeric = numeric,
+    anchors = anchors,
+    single = single,
+    show_question = show,
+    layout = layout_attr(el, id),
+    results = results or "live",
+    qr = truthy(el.attributes["qr"]) ~= false,
+  })
+
+  if el.identifier == "" then
+    el.identifier = id
+    return el
+  end
+  return nil
+end
+
+-- The diverging palette's tone for each point: which side of neutral, and how
+-- far out. Mirrors the steps the CSS colours (livepoll.css, .lp-likert).
+local TONE_STEPS = { [1] = { 3 }, [2] = { 2, 4 }, [3] = { 1, 3, 5 }, [4] = { 1, 2, 4, 5 }, [5] = { 1, 2, 3, 4, 5 } }
+
+local function likert_tones(n)
+  local arm = n // 2
+  local steps = TONE_STEPS[arm] or TONE_STEPS[5]
+  local out = {}
+  for i = 0, n - 1 do
+    if n % 2 == 1 and i == arm then
+      out[#out + 1] = { side = "mid", step = 0 }
+    else
+      local away = i < arm and (arm - i) or (i - (n - arm) + 1)
+      out[#out + 1] = { side = i < arm and "neg" or "pos", step = steps[away] or steps[#steps] }
+    end
+  end
+  return out
+end
+
 local function collect_rawblock(el)
   if not is_html(el.format) then return nil end
 
@@ -637,7 +796,224 @@ local function panel_cloud_html(id)
   return table.concat(out, "\n")
 end
 
+------------------------------------------------------------ likert markup
+
+-- The scale under the statements, for the classic slide: "Scale: a · b · c",
+-- or for a numeric scale with named ends "Scale: 0 (never) to 10 (always)".
+local function likert_scale_text(likert)
+  local labels = likert.labels
+  if likert.anchors then
+    return string.format("%s (%s) to %s (%s)", labels[1], likert.anchors[1],
+      labels[#labels], likert.anchors[2])
+  end
+  return table.concat(labels, " · ")
+end
+
+-- classic: the question slide shows what is being rated; phones do the rating
+local function likert_html(id)
+  local likert = likerts[id]
+  local eid = html_escape(id)
+  local out = {}
+  if likert.show_question then out[#out + 1] = question_html(id, likert.question) end
+  out[#out + 1] = '<div class="likert lp-likert-classic" data-likert="' .. eid .. '">'
+  if not likert.single then
+    out[#out + 1] = '<ul class="likert-statements">'
+    for _, s in ipairs(likert.statements) do
+      out[#out + 1] = "<li>" .. html_escape(s) .. "</li>"
+    end
+    out[#out + 1] = "</ul>"
+  end
+  out[#out + 1] = '<p class="likert-scale-note">Scale: ' .. html_escape(likert_scale_text(likert)) .. "</p>"
+  out[#out + 1] = "</div>"
+  out[#out + 1] = '<p class="poll-voters">Responses: <span class="likert-voters" data-likert="'
+    .. eid .. '">0</span></p>'
+  return table.concat(out, "\n")
+end
+
+local LIKERT_NEG = { "#f8cfc4", "#f09a84", "#dc5a3c", "#b23f27", "#842a1a" }
+local LIKERT_POS = { "#c6dcf8", "#86b6ef", "#3987e5", "#1f63b8", "#104281" }
+local LIKERT_MID = "#dcdbd6"
+
+-- One colour per point: the diverging palette for a worded scale, light to
+-- dark blue for a numeric one.
+local function likert_colours(likert)
+  local n = #likert.labels
+  local out = {}
+  if likert.numeric then
+    local a, b = { 0xc6, 0xdc, 0xf8 }, { 0x10, 0x42, 0x81 }
+    for i = 0, n - 1 do
+      local t = n > 1 and i / (n - 1) or 0
+      out[#out + 1] = string.format("#%02x%02x%02x",
+        math.floor(a[1] + (b[1] - a[1]) * t + 0.5),
+        math.floor(a[2] + (b[2] - a[2]) * t + 0.5),
+        math.floor(a[3] + (b[3] - a[3]) * t + 0.5))
+    end
+  else
+    for _, tone in ipairs(likert_tones(n)) do
+      if tone.side == "mid" then out[#out + 1] = LIKERT_MID
+      elseif tone.side == "neg" then out[#out + 1] = LIKERT_NEG[tone.step]
+      else out[#out + 1] = LIKERT_POS[tone.step] end
+    end
+  end
+  return out
+end
+
+-- classic results: one stacked bar per statement, one segment per point. The
+-- dataset labels go through the chart plugin's CSV, which splits on commas.
+local function likert_results_html(id, height, show_question)
+  local likert = likerts[id]
+  local eid = html_escape(id)
+  local colours = likert_colours(likert)
+  local datasets, rows = {}, {}
+  for p, label in ipairs(likert.labels) do
+    datasets[#datasets + 1] = { backgroundColor = colours[p], borderWidth = 0 }
+    local zeros = {}
+    for _ = 1, #likert.statements do zeros[#zeros + 1] = "0" end
+    rows[#rows + 1] = label:gsub(",", ";") .. ", " .. table.concat(zeros, ", ")
+  end
+  -- Chart.js draws an array label as lines; without wrapping, a long
+  -- statement is cut off at the chart's left edge
+  local function wrap(text, width)
+    local lines, line = {}, ""
+    for word in text:gmatch("%S+") do
+      if line ~= "" and utf8.len(line .. " " .. word) > width then
+        lines[#lines + 1] = line
+        line = word
+      else
+        line = line == "" and word or (line .. " " .. word)
+      end
+    end
+    if line ~= "" then lines[#lines + 1] = line end
+    return #lines > 1 and lines or text
+  end
+  local labels = {}
+  for i, statement in ipairs(likert.statements) do labels[i] = wrap(statement, 24) end
+  local chart = {
+    data = { labels = labels, datasets = datasets },
+    options = {
+      indexAxis = "y",
+      plugins = { legend = { display = true, position = "bottom" } },
+      scales = {
+        x = { stacked = true, beginAtZero = true, ticks = { precision = 0 } },
+        y = { stacked = true },
+      },
+      responsive = false, -- sized by livepoll.js, as for polls
+      maintainAspectRatio = false,
+    },
+  }
+  local out = {}
+  if show_question then out[#out + 1] = question_html(id, likert.question) end
+  out[#out + 1] = '<div class="poll-results" style="position:relative;height:' .. height .. ';width:100%;">'
+  out[#out + 1] = '<canvas data-chart="bar" data-likert="' .. eid .. '" width="900" height="'
+    .. tostring(tonumber(height:match("%d+")) or 360) .. '">'
+  out[#out + 1] = table.concat(rows, "\n")
+  out[#out + 1] = "<!--"
+  out[#out + 1] = quarto.json.encode(chart)
+  out[#out + 1] = "-->"
+  out[#out + 1] = "</canvas>"
+  out[#out + 1] = "</div>"
+  out[#out + 1] = '<p class="poll-voters">Responses: <span class="likert-voters" data-likert="'
+    .. eid .. '">0</span></p>'
+  return table.concat(out, "\n")
+end
+
+-- embedded: the chart is drawn here once, empty; livepoll.js only moves bars.
+-- Worded scales get one diverging bar per statement (disagree left of the
+-- line, agree right), numeric ones a histogram per statement with the mean.
+local function panel_likert_html(id)
+  local likert = likerts[id]
+  local eid = html_escape(id)
+  local n = #likert.labels
+  local out = {
+    '<div class="livepoll-question lp-likert-q" data-likert="' .. eid
+      .. '" data-results="' .. likert.results .. '">',
+    '<div class="lp-main">',
+  }
+  if likert.show_question then out[#out + 1] = question_html(id, likert.question) end
+
+  local kind = likert.numeric and "lp-lk-numeric" or "lp-lk-labeled"
+  out[#out + 1] = '<div class="likert lp-likert ' .. kind .. (n <= 3 and " lp-lk-short" or "")
+    .. '" data-likert="' .. eid .. '" data-statements="' .. #likert.statements
+    .. '" style="--lp-points:' .. n .. '">'
+
+  -- legend
+  if likert.numeric then
+    local a = likert.anchors
+    out[#out + 1] = '<div class="lp-lk-legend lp-lk-anchors">'
+    if a and a[1] ~= "" then
+      out[#out + 1] = '<span class="lp-lk-anchor"><b>' .. html_escape(likert.labels[1]) .. "</b> " .. html_escape(a[1]) .. "</span>"
+    end
+    if a and (a[1] ~= "" or a[2] ~= "") then out[#out + 1] = '<span class="lp-lk-dash"></span>' end
+    if a and a[2] ~= "" then
+      out[#out + 1] = '<span class="lp-lk-anchor"><b>' .. html_escape(likert.labels[n]) .. "</b> " .. html_escape(a[2]) .. "</span>"
+    end
+    out[#out + 1] = '<span class="lp-lk-key lp-lk-mean-key"><i class="lp-lk-mean-icon"></i>mean</span>'
+    out[#out + 1] = "</div>"
+  else
+    local tones = likert_tones(n)
+    out[#out + 1] = '<div class="lp-lk-legend">'
+    for p, label in ipairs(likert.labels) do
+      out[#out + 1] = '<span class="lp-lk-key"><i class="lp-lk-swatch" data-side="' .. tones[p].side
+        .. '" data-step="' .. tones[p].step .. '"></i>' .. html_escape(label) .. "</span>"
+    end
+    out[#out + 1] = "</div>"
+  end
+
+  -- one row per statement
+  out[#out + 1] = '<div class="lp-lk-rows">'
+  for _, statement in ipairs(likert.statements) do
+    local label = likert.single and "" or ('<div class="lp-lk-label">' .. html_escape(statement) .. "</div>")
+    out[#out + 1] = '<div class="lp-lk-row">'
+    if likert.numeric then
+      out[#out + 1] = '<div class="lp-lk-head">' .. label
+        .. '<span class="lp-lk-meta"><span class="lp-lk-stats"></span><span class="lp-lk-n"></span></span></div>'
+      out[#out + 1] = '<div class="lp-hist">'
+      for _ = 1, n do
+        out[#out + 1] = '<div class="lp-hist-col"><div class="lp-hist-bar"><span class="lp-hist-n"></span></div></div>'
+      end
+      out[#out + 1] = '<div class="lp-hist-mean" hidden></div></div>'
+      out[#out + 1] = '<div class="lp-hist-axis">'
+      for _, l in ipairs(likert.labels) do out[#out + 1] = "<span>" .. html_escape(l) .. "</span>" end
+      out[#out + 1] = "</div>"
+    else
+      local tones = likert_tones(n)
+      out[#out + 1] = '<div class="lp-lk-head">' .. label .. '<span class="lp-lk-n"></span></div>'
+      out[#out + 1] = '<div class="lp-lk-line"><span class="lp-lk-total lp-lk-neg"></span><div class="lp-lk-track"><div class="lp-lk-axis"></div>'
+      for p, l in ipairs(likert.labels) do
+        out[#out + 1] = '<div class="lp-lk-seg lp-lk-zero" data-side="' .. tones[p].side .. '" data-step="' .. tones[p].step
+          .. '" title="' .. html_escape(l) .. '"><span class="lp-lk-pct"></span></div>'
+      end
+      out[#out + 1] = '</div><span class="lp-lk-total lp-lk-pos"></span></div>'
+    end
+    out[#out + 1] = "</div>"
+  end
+  out[#out + 1] = "</div>"
+  out[#out + 1] = '<div class="lp-veil">Results hidden</div>'
+  out[#out + 1] = "</div>"
+  out[#out + 1] = "</div>"
+
+  out[#out + 1] = panel_side_html(
+    likert.qr,
+    '<span class="likert-voters lp-count-n" data-likert="' .. eid .. '">0</span>',
+    "responses"
+  )
+  if likert.results == "hidden" then
+    out[#out + 1] = '<p class="lp-reveal fragment lp-step" data-likert="' .. eid .. '">Results</p>'
+  end
+  out[#out + 1] = "</div>"
+  return table.concat(out, "\n")
+end
+
 local function generate_div(el)
+  if el.classes:includes("likert") then
+    local id = el.identifier
+    if not likerts[id] then return nil end
+    if is_panel(likerts[id]) then
+      return pandoc.RawBlock("html", panel_likert_html(id))
+    end
+    return pandoc.RawBlock("html", likert_html(id))
+  end
+
   if el.classes:includes("wordcloud") then
     local id = el.identifier
     if id == nil or id == "" then
@@ -669,6 +1045,13 @@ local function generate_div(el)
     if id == nil or id == "" then
       quarto.log.warning("livepoll: a .poll-results div has no for=\"<poll id>\".")
       return nil
+    end
+    if likerts[id] then
+      return pandoc.RawBlock("html", likert_results_html(
+        id,
+        el.attributes["height"] or "360px",
+        truthy(el.attributes["show-question"]) == true
+      ))
     end
     if not polls[id] then
       quarto.log.warning("livepoll: .poll-results refers to unknown poll '" .. id .. "'.")
@@ -852,7 +1235,7 @@ local function read_session(meta)
     return nil
   end
 
-  local recorded = { polls = {}, clouds = {} }
+  local recorded = { polls = {}, clouds = {}, likerts = {} }
   local any = false
 
   for _, rec in ipairs(session.polls or {}) do
@@ -886,10 +1269,34 @@ local function read_session(meta)
     end
   end
 
+  for _, rec in ipairs(session.likerts or {}) do
+    local likert = rec.id and likerts[rec.id]
+    if not likert then
+      quarto.log.warning("livepoll: " .. name .. " has likert '" .. tostring(rec.id) .. "', which is not in this deck")
+    else
+      -- counts[statement][point]; only usable if the shape still matches
+      local counts = rec.counts or {}
+      local fits = #counts == #likert.statements
+      for _, row in ipairs(counts) do
+        if type(row) ~= "table" or #row ~= #likert.labels then fits = false end
+      end
+      if not fits then
+        quarto.log.warning(
+          "livepoll: " .. name .. " has likert '" .. rec.id .. "' with a different number of "
+            .. "statements or scale points than the deck now has; it is not replayed"
+        )
+      elseif (tonumber(rec.voters) or 0) > 0 then
+        recorded.likerts[rec.id] = { counts = counts, voters = tonumber(rec.voters) }
+        any = true
+      end
+    end
+  end
+
   if not any then return nil end
   -- an empty Lua table would encode as [] rather than {}
   if next(recorded.polls) == nil then recorded.polls = nil end
   if next(recorded.clouds) == nil then recorded.clouds = nil end
+  if next(recorded.likerts) == nil then recorded.likerts = nil end
   return recorded
 end
 
@@ -938,7 +1345,7 @@ local function emit(doc)
     end
   end
 
-  if #poll_order == 0 and #cloud_order == 0 then
+  if #poll_order == 0 and #cloud_order == 0 and #likert_order == 0 then
     quarto.log.warning("livepoll: no polls or word clouds found on the slides.")
   end
 
@@ -959,6 +1366,17 @@ local function emit(doc)
   for id, cloud in pairs(clouds) do
     published_clouds[id] = { question = cloud.question, maxWords = cloud.maxWords }
   end
+  local published_likerts = {}
+  for id, likert in pairs(likerts) do
+    published_likerts[id] = {
+      question = likert.question,
+      statements = likert.statements,
+      labels = likert.labels,
+      numeric = likert.numeric,
+      anchors = likert.anchors,
+      single = likert.single,
+    }
+  end
 
   local config = {
     title = meta.title and meta_value(meta.title) or nil,
@@ -973,6 +1391,8 @@ local function emit(doc)
     polls = published_polls,
     cloudOrder = cloud_order,
     clouds = published_clouds,
+    likertOrder = likert_order,
+    likerts = published_likerts,
     recorded = read_session(meta),
   }
 
@@ -989,7 +1409,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "1.5.0",
+    version = "1.6.0",
     scripts = { "qrcode.js", "livepoll.js" },
     stylesheets = { "livepoll.css" },
   })
@@ -1008,7 +1428,7 @@ return {
     Div = function(el)
       collect_div(el)
       collect_cloud(el)
-      return nil
+      return collect_likert(el)
     end,
     RawBlock = collect_rawblock,
     Meta = read_layout,
