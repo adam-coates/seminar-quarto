@@ -1,4 +1,7 @@
-
+> **Nota:** esta traducción describe la versión anterior (con `postprocess.py`),
+> que se conserva en la rama [`old`](https://github.com/adam-coates/seminar-quarto/tree/old).
+> La versión actual es una extensión de Quarto sin postprocesamiento: consulta
+> el [README en inglés](README.md).
 
 # Plugin de Seminar para Quarto
 
