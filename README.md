@@ -218,7 +218,7 @@ Which of these is a systematic error?
 | attribute | on | meaning |
 | --- | --- | --- |
 | `for` | `.poll-results` | the poll's or rating scale's id (required) |
-| `orientation` | `.poll-results` | `horizontal` (default) or `vertical`; polls only |
+| `orientation` | `.poll-results` | `horizontal` (default) or `vertical`, for polls and rating scales |
 | `height` | `.poll-results`, `.wordcloud` | box height, default `360px` |
 | `show-question` | `.poll`, `.poll-results`, `.wordcloud`, `.likert` | print the question (or not) |
 | `size`, `url`, `caption` | `.poll-qr` | QR size in px, a different target, `caption="false"` hides the URL |
