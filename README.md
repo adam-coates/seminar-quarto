@@ -50,7 +50,7 @@ own (see [Password](#password)).
 In your project folder:
 
 ```bash
-quarto add adam-coates/seminar-quarto
+quarto add adam-coates/seminar-quarto@master
 ```
 
 This installs the extension into `_extensions/adam-coates/livepoll/`.
