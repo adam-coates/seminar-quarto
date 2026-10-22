@@ -1,7 +1,7 @@
 /.quarto/
 **/*.quarto_ipynb
 
-# rendered output
-index.html
-index_files/
-poll.html
+# rendered output (anchored: the extension has its own poll.html)
+/index.html
+/index_files/
+/poll.html

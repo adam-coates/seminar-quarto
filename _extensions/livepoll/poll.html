@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Poll</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        background: linear-gradient(135deg, white 0%, grey 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        padding: 40px;
+        max-width: 500px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+
+      #status {
+        padding: 12px;
+        margin: 20px 0;
+        border-radius: 10px;
+        font-size: 14px;
+        text-align: center;
+        font-weight: 500;
+      }
+
+      #status.connecting {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      #status.connected {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      #status.error {
+        background: #f8d7da;
+        color: #721c24;
+      }
+
+      #status.waiting {
+        background: #cce5ff;
+        color: #004085;
+      }
+
+      .poll-content {
+        min-height: 200px;
+      }
+
+      .poll-question {
+        font-size: 20px;
+        color: #555;
+        margin-bottom: 30px;
+        line-height: 1.5;
+      }
+
+      .poll-options {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      button {
+        padding: 18px 30px;
+        font-size: 18px;
+        border: 2px solid #667eea;
+        background: white;
+        color: #667eea;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 600;
+      }
+
+      button:hover:not(:disabled) {
+        background: #667eea;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      button.selected {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+      }
+
+      .footer {
+        margin-top: 30px;
+        text-align: center;
+        color: #999;
+        font-size: 14px;
+      }
+
+      .waiting-message {
+        text-align: center;
+        padding: 40px 20px;
+        color: #666;
+      }
+
+      .waiting-message h2 {
+        font-size: 24px;
+        margin-bottom: 15px;
+        color: #333;
+      }
+
+      .waiting-message p {
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .setup-help {
+        margin-top: 16px;
+        padding: 14px;
+        border-radius: 10px;
+        background: #f4f4f4;
+        color: #555;
+        font-size: 14px;
+        line-height: 1.6;
+        text-align: left;
+      }
+
+      .setup-help code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        background: #e6e6e6;
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+
+      .word-form {
+        display: flex;
+        gap: 10px;
+      }
+
+      .word-form input {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 16px;
+        font-size: 18px;
+        border: 2px solid #667eea;
+        border-radius: 12px;
+      }
+
+      .word-form input:disabled {
+        opacity: 0.5;
+      }
+
+      .word-form button {
+        flex: 0 0 auto;
+        padding: 16px 22px;
+      }
+
+      .my-words {
+        margin-top: 20px;
+        color: #555;
+        font-size: 15px;
+        line-height: 2;
+      }
+
+      .my-words .chip {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: #eef0fb;
+        color: #3b4a9c;
+        font-weight: 600;
+      }
+
+      .answer-box {
+        margin-top: 24px;
+        padding: 16px;
+        border-radius: 12px;
+        background: #eef7f0;
+        border: 2px solid #2e9e4f;
+        color: #1c5c30;
+        text-align: center;
+        font-size: 17px;
+        line-height: 1.5;
+      }
+
+      .answer-box .verdict {
+        margin-top: 10px;
+        font-weight: 600;
+      }
+
+      .answer-box .verdict.wrong {
+        color: #a3341f;
+      }
+
+      button.is-correct {
+        border-color: #2e9e4f;
+        color: #2e9e4f;
+        opacity: 1;
+      }
+
+      button.is-wrong {
+        border-color: #c0392b;
+        color: #c0392b;
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 id="pollTitle">Live Poll</h1>
+      <div id="status" class="connecting">Reading deck configuration...</div>
+
+      <div class="poll-content" id="pollContent">
+        <div class="waiting-message">
+          <h2>🎯 Waiting for Poll</h2>
+          <p>
+            The presenter will activate a poll question soon. Please stand by...
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        Your response will be recorded anonymously
+      </div>
+    </div>
+
+    <script>
+      /*******************************************************************
+       ** THIS FILE NEEDS NO EDITING.
+       **
+       ** It reads the server, venue, room, hash and every poll question
+       ** straight out of the rendered deck, from the JSON block that
+       ** livepoll.lua writes into the deck's <head>. Change the room or a
+       ** question in the .qmd, re-render, reload this page — done.
+       **
+       ** Which deck it reads, in order of preference:
+       **   1. ?deck=my-slides.html in this page's URL
+       **   2. the page you followed the link from
+       **   3. the last deck this browser used successfully
+       **   4. index.html
+       *******************************************************************/
+
+      const CONFIG_RE =
+        /<script type="application\/json" id="livepoll-config">([\s\S]*?)<\/script>/;
+      const DECK_KEY = "livepoll_deck";
+
+      const statusEl = document.getElementById("status");
+      const pollContent = document.getElementById("pollContent");
+
+      let config = null;
+      let polls = {};
+      let clouds = {};
+      let socket;
+      let joined = false;
+      let activePollId = null;
+      let voted = false;
+
+      function updateStatus(message, type = "connecting") {
+        statusEl.textContent = message;
+        statusEl.className = type;
+      }
+
+      /* ------------------------------------------------- deck discovery */
+
+      function candidateDecks() {
+        const seen = new Set();
+        const list = [];
+        const add = (d) => {
+          if (d && !seen.has(d)) {
+            seen.add(d);
+            list.push(d);
+          }
+        };
+
+        add(new URLSearchParams(location.search).get("deck"));
+        if (document.referrer) {
+          try {
+            const u = new URL(document.referrer);
+            if (u.origin === location.origin && /\.html?$/i.test(u.pathname)) {
+              add(u.pathname);
+            }
+          } catch (e) {
+            /* ignore an unparseable referrer */
+          }
+        }
+        add(localStorage.getItem(DECK_KEY));
+        add("index.html");
+        return list;
+      }
+
+      async function readDeck(url) {
+        // The config block sits in <head>, so try to fetch only the start of
+        // the file. This is an optimisation, never a requirement: a host may
+        // ignore Range, or hand back a partial compressed stream that cannot
+        // be decoded, so any disappointment falls through to a full fetch.
+        let text = null;
+        try {
+          const res = await fetch(url, { headers: { Range: "bytes=0-262143" } });
+          if (res.ok || res.status === 206) {
+            const partial = await res.text();
+            if (CONFIG_RE.test(partial)) text = partial;
+          }
+        } catch (e) {
+          /* fall through to the full fetch */
+        }
+
+        if (text === null) {
+          try {
+            const full = await fetch(url);
+            if (!full.ok) return null;
+            text = await full.text();
+          } catch (e) {
+            return null;
+          }
+        }
+
+        const match = text.match(CONFIG_RE);
+        if (!match) return null;
+        try {
+          return JSON.parse(match[1]);
+        } catch (e) {
+          console.error("livepoll: deck config is not valid JSON", e);
+          return null;
+        }
+      }
+
+      async function loadConfig() {
+        for (const deck of candidateDecks()) {
+          const cfg = await readDeck(deck);
+          if (cfg && cfg.server) {
+            localStorage.setItem(DECK_KEY, deck);
+            return cfg;
+          }
+        }
+        return null;
+      }
+
+      function showSetupHelp() {
+        document.getElementById("pollTitle").textContent = "Live Poll";
+        updateStatus("Could not read the deck configuration", "error");
+        pollContent.innerHTML = `
+          <div class="waiting-message">
+            <h2>No deck found</h2>
+            <p>This page configures itself from the slide deck, and could not find one.</p>
+          </div>
+          <div class="setup-help">
+            Serve this page from the same folder as the rendered deck, then open it as
+            <code>poll.html?deck=your-slides.html</code>.<br><br>
+            If the deck is there, check that it was rendered with the
+            <code>livepoll</code> filter enabled and has a top-level
+            <code>seminar:</code> block in its front matter.
+          </div>`;
+      }
+
+      /* ------------------------------------------------------ vote locks */
+
+      function hasVoted(pollId) {
+        return localStorage.getItem(`voted_${pollId}`) === "true";
+      }
+
+      function markVoted(pollId, choice) {
+        localStorage.setItem(`voted_${pollId}`, "true");
+        localStorage.setItem(`choice_${pollId}`, choice);
+      }
+
+      function myChoice(pollId) {
+        return localStorage.getItem(`choice_${pollId}`);
+      }
+
+      /* ------------------------------------------------------------- UI */
+
+      function showWaitingMessage() {
+        pollContent.innerHTML = `
+        <div class="waiting-message">
+          <h2>🎯 Waiting for Poll</h2>
+          <p>The presenter will activate a poll question soon. Please stand by...</p>
+        </div>
+      `;
+        updateStatus("Connected - Waiting for poll activation", "waiting");
+      }
+
+      function displayPoll(pollId) {
+        const poll = polls[pollId];
+        if (!poll) {
+          console.error("Poll not found:", pollId);
+          return;
+        }
+
+        activePollId = pollId;
+        voted = hasVoted(pollId);
+
+        let optionsHtml = "";
+        poll.options.forEach((option) => {
+          optionsHtml += `<button onclick="submitVote('${option.value}', event)" data-value="${option.value}">${option.label}</button>`;
+        });
+
+        pollContent.innerHTML = `
+    <div class="poll-question">${poll.question}</div>
+    <div class="poll-options" id="pollOptions">
+      ${optionsHtml}
+    </div>
+  `;
+
+        if (voted) {
+          disableButtons();
+          updateStatus("You already voted in this poll.", "waiting");
+          pollContent.innerHTML += `
+      <p style="margin-top:20px;color:#666;text-align:center;">
+        ✅ Your vote for this poll has already been recorded.
+      </p>`;
+        } else {
+          updateStatus("Poll active - Cast your vote!", "connected");
+        }
+      }
+
+      /* ------------------------------------------------- word clouds */
+
+      function myWords(cloudId) {
+        try {
+          return JSON.parse(localStorage.getItem(`words_${cloudId}`) || "[]");
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function rememberWord(cloudId, word) {
+        const words = myWords(cloudId);
+        words.push(word);
+        localStorage.setItem(`words_${cloudId}`, JSON.stringify(words));
+      }
+
+      // one word per submission: trimmed, collapsed, lower-cased so that
+      // "Brain" and "brain " land on the same tally entry
+      function normaliseWord(raw) {
+        return String(raw || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase()
+          .slice(0, 30);
+      }
+
+      function displayCloud(cloudId) {
+        const cloud = clouds[cloudId];
+        if (!cloud) return;
+
+        activePollId = cloudId;
+        const max = cloud.maxWords || 3;
+
+        pollContent.innerHTML = `
+          <div class="poll-question">${cloud.question}</div>
+          <form class="word-form" id="wordForm">
+            <input type="text" id="wordInput" maxlength="30" autocomplete="off"
+                   placeholder="type a word" aria-label="your word">
+            <button type="submit" id="wordSubmit">Send</button>
+          </form>
+          <div class="my-words" id="myWords"></div>`;
+
+        document.getElementById("wordForm").addEventListener("submit", (evt) => {
+          evt.preventDefault();
+          submitWord(cloudId);
+        });
+
+        renderMyWords(cloudId);
+      }
+
+      function renderMyWords(cloudId) {
+        const cloud = clouds[cloudId];
+        const max = cloud.maxWords || 3;
+        const words = myWords(cloudId);
+        const box = document.getElementById("myWords");
+        if (!box) return;
+
+        box.innerHTML = words.length
+          ? "Your words: " +
+            words.map((w) => `<span class="chip">${w}</span>`).join(" ")
+          : "";
+
+        const left = max - words.length;
+        const input = document.getElementById("wordInput");
+        const button = document.getElementById("wordSubmit");
+        if (left <= 0) {
+          if (input) input.disabled = true;
+          if (button) button.disabled = true;
+          updateStatus(`Thanks — you sent ${words.length} of ${max} words`, "waiting");
+        } else {
+          updateStatus(`Send a word (${left} of ${max} left)`, "connected");
+        }
+      }
+
+      function submitWord(cloudId) {
+        if (!joined) {
+          alert("Not connected yet. Please wait...");
+          return;
+        }
+        const input = document.getElementById("wordInput");
+        const word = normaliseWord(input.value);
+        if (!word) return;
+
+        const max = clouds[cloudId].maxWords || 3;
+        if (myWords(cloudId).length >= max) return;
+
+        socket.emit("message", {
+          venue: config.url,
+          name: config.room,
+          hash: config.hash,
+          recipient: true,
+          content: {
+            sender: "wordcloud-plugin",
+            recipient: true,
+            type: "word",
+            cloud: cloudId,
+            word: word,
+          },
+        });
+
+        rememberWord(cloudId, word);
+        input.value = "";
+        renderMyWords(cloudId);
+      }
+
+      function disableButtons() {
+        const buttons = pollContent.querySelectorAll("button");
+        buttons.forEach((btn) => (btn.disabled = true));
+      }
+
+      function submitVote(choice, event) {
+        if (!joined) {
+          alert("Not connected to poll yet. Please wait...");
+          return;
+        }
+        if (!activePollId) {
+          alert("No active poll!");
+          return;
+        }
+        if (voted || hasVoted(activePollId)) {
+          alert("You have already voted on this poll!");
+          disableButtons();
+          return;
+        }
+
+        disableButtons();
+        event.target.classList.add("selected");
+
+        socket.emit("message", {
+          venue: config.url,
+          name: config.room,
+          hash: config.hash,
+          recipient: true,
+          content: {
+            sender: "poll-plugin",
+            recipient: true,
+            type: "vote",
+            poll: activePollId,
+            choice: choice,
+          },
+        });
+
+        voted = true;
+        markVoted(activePollId, choice);
+        updateStatus("Vote submitted: " + choice, "connected");
+      }
+
+      window.submitVote = submitVote;
+
+      /* --------------------------------------------------------- socket */
+
+      function sameRoom(room) {
+        return (
+          room.venue == config.url &&
+          room.name == config.room &&
+          room.hash == config.hash
+        );
+      }
+
+      // Shown only when the presenter reveals it, never before.
+      function showAnswer(pollId, correct) {
+        if (pollId !== activePollId) return;
+        const poll = polls[pollId];
+        if (!poll || !correct) return;
+        if (document.getElementById("answerBox")) return; // already shown
+
+        const option = poll.options.find((o) => o.value === correct);
+        if (!option) return;
+
+        const mine = myChoice(pollId);
+        let verdict = "";
+        if (mine) {
+          verdict =
+            mine === correct
+              ? '<div class="verdict right">✅ You were right</div>'
+              : '<div class="verdict wrong">❌ You answered ' +
+                mine +
+                "</div>";
+        }
+
+        const box = document.createElement("div");
+        box.id = "answerBox";
+        box.className = "answer-box";
+        box.innerHTML =
+          "<strong>Correct answer</strong><div>" +
+          option.label +
+          "</div>" +
+          verdict;
+        pollContent.appendChild(box);
+
+        // mark the buttons themselves
+        pollContent.querySelectorAll("button[data-value]").forEach((btn) => {
+          if (btn.getAttribute("data-value") === correct) {
+            btn.classList.add("is-correct");
+          } else if (mine && btn.getAttribute("data-value") === mine) {
+            btn.classList.add("is-wrong");
+          }
+        });
+      }
+
+      function handlePollControl(content) {
+        const pollControl = content.custom || content;
+        if (!pollControl || pollControl.sender !== "poll-control") return;
+
+        if (pollControl.type === "activate-poll") {
+          if (activePollId === pollControl.pollId) return; // duplicate
+          if (clouds[pollControl.pollId]) {
+            displayCloud(pollControl.pollId);
+          } else {
+            displayPoll(pollControl.pollId);
+          }
+        } else if (pollControl.type === "deactivate-poll") {
+          activePollId = null;
+          showWaitingMessage();
+        } else if (pollControl.type === "reveal-answer") {
+          showAnswer(pollControl.pollId, pollControl.correct);
+        }
+      }
+
+      function attemptJoinRoom() {
+        socket.emit(
+          "join_room",
+          { venue: config.url, name: config.room, hash: config.hash },
+          function (error) {
+            if (error) {
+              if (String(error).includes("not found")) {
+                updateStatus("Waiting for presenter to start seminar...", "waiting");
+                setTimeout(attemptJoinRoom, 3000);
+              } else {
+                updateStatus("Error joining poll: " + error, "error");
+              }
+              return;
+            }
+
+            joined = true;
+            showWaitingMessage();
+
+            // Ask the host which poll is currently active (late join).
+            socket.emit("message", {
+              venue: config.url,
+              name: config.room,
+              hash: config.hash,
+              recipient: true,
+              content: { sender: "poll-page", type: "request-active-poll" },
+            });
+          }
+        );
+      }
+
+      function connect() {
+        socket = io.connect(config.server, {
+          transports: ["websocket"],
+          withCredentials: true,
+        });
+
+        socket.on("connect", function () {
+          updateStatus("Connected to server, joining poll...", "connecting");
+          const username = "poll-" + Math.random().toString(36).substr(2, 9);
+          socket.emit("checkin", username, function (error) {
+            if (error) {
+              updateStatus("Error: " + error, "error");
+              return;
+            }
+            attemptJoinRoom();
+          });
+        });
+
+        socket.on("announcement", function ({ room, content }) {
+          if (!sameRoom(room)) return;
+          handlePollControl(content);
+        });
+
+        socket.on("message", function ({ room, content }) {
+          if (!sameRoom(room)) return;
+          handlePollControl(content);
+        });
+
+        socket.on("disconnect", function () {
+          joined = false;
+          updateStatus("Disconnected from server", "error");
+          disableButtons();
+        });
+
+        socket.on("connect_error", function (error) {
+          console.error("Connection error:", error);
+          updateStatus("Connection failed. Please refresh the page.", "error");
+        });
+      }
+
+      /* ----------------------------------------------------------- boot */
+
+      (async function () {
+        const cfg = await loadConfig();
+        if (!cfg) {
+          showSetupHelp();
+          return;
+        }
+
+        // Mirror seminar.js: venue falls back to the host, room to the venue.
+        config = {
+          server: cfg.server,
+          url: cfg.url || location.host,
+          room: cfg.room || cfg.url || location.host,
+          hash: cfg.hash,
+        };
+        polls = cfg.polls || {};
+        clouds = cfg.clouds || {};
+
+        if (cfg.title) document.getElementById("pollTitle").textContent = cfg.title;
+        updateStatus("Connecting to server...", "connecting");
+        connect();
+      })();
+    </script>
+  </body>
+</html>
