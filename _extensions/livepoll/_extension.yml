@@ -1,0 +1,49 @@
+title: Livepoll
+author: Adam Coates
+version: 1.4.0
+quarto-required: ">=1.4.0"
+contributes:
+  filters:
+    # injects the CDN dependencies + the control panel into <head>
+    - livepoll.lua
+  revealjs-plugins:
+    - name: RevealSeminar
+      script:
+        - seminar.js
+      config:
+        seminar:
+          # Override these three per deck, in the deck's own front matter:
+          #   format:
+          #     revealjs:
+          #       seminar:
+          #         url: "my-course"      # venue
+          #         room: "week-01"
+          #         hash: "$2a$05$..."    # bcrypt hash of the host password
+          server: "https://seminar.adamcoates.at/"
+          autoJoin: true
+          # resolved to window.seminarStatusLogger by seminar.js
+          logger: seminarStatusLogger
+    - name: RevealChart
+      script:
+        - chart.js
+      config:
+        chart:
+          defaults:
+            maintainAspectRatio: false
+            responsive: true
+            color: 'lightgray'
+            font:
+              size: 30
+            scale:
+              beginAtZero: true
+              ticks:
+                stepSize: 1
+              grid:
+                color: 'lightgray'
+          bar:
+            backgroundColor: ['firebrick', 'darkred', 'red']
+          pie:
+            backgroundColor: [['black', 'red', 'green', 'yellow']]
+    - name: RevealPoll
+      script:
+        - poll.js
