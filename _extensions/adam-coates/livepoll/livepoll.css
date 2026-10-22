@@ -30,16 +30,83 @@
   color: #2e9e4f;
 }
 
-/* likert, classic: what is being rated; the phones do the rating */
-.reveal .lp-likert-classic .likert-statements {
-  margin: 0.3em 0 0.6em 1.2em;
+/* likert, classic: a row of buttons per statement, styled as the classic poll
+   buttons are (the upstream poll stylesheet: link colour, rounded, green once
+   chosen). Not inside a .poll, so those rules have to be restated here. */
+.reveal .lp-likert-classic {
+  margin-top: 0.4em;
+  font-size: 0.6em;
 }
 
-.reveal .lp-likert-classic .likert-scale-note {
-  margin: 0.4em 0 0;
+.reveal .lp-likert-classic .likert-statement {
+  margin: 0 0 0.9em;
+}
+
+.reveal .lp-likert-classic .likert-statement-text {
+  margin-bottom: 0.35em;
+  text-align: left;
+}
+
+.reveal .lp-likert-classic .likert-choices {
+  display: grid;
+  grid-template-columns: repeat(var(--lp-points), minmax(0, 1fr));
+  gap: 0.35em;
+}
+
+.reveal .lp-likert-classic button {
+  margin: 0;
+  padding: 0.45em 0.3em;
+  border: none;
+  border-radius: 8px;
+  background-color: var(--r-link-color, #2a76dd);
+  color: var(--r-background-color, #fff);
+  font-family: inherit;
+  font-size: 0.9em;
+  line-height: 1.15;
+  cursor: pointer;
+  transition: background-color 0.3s ease, opacity 0.3s ease;
+}
+
+.reveal .lp-likert-classic button:hover:not(:disabled) {
+  background-color: var(--r-link-color-hover, #1a5bb8);
+}
+
+/* stays green under the pointer, too */
+.reveal .lp-likert-classic button.selected,
+.reveal .lp-likert-classic button.selected:hover {
+  background-color: #2e9e4f;
+}
+
+/* after Submit: the choices made stay green, the rest grey */
+.reveal .lp-likert-classic button:disabled:not(.selected) {
+  background-color: darkgray;
+  cursor: default;
+}
+
+.reveal .lp-likert-classic.likert-numeric button.likert-choice {
+  padding: 0.45em 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .lp-likert-classic .likert-anchors {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25em;
   color: gray;
-  font-size: 0.6em;
-  font-style: italic;
+  font-size: 0.8em;
+}
+
+.reveal .lp-likert-classic .likert-submit {
+  display: block;
+  min-width: 40%;
+  margin: 0.2em auto 0;
+  padding: 0.45em 1.2em;
+}
+
+/* not yet answerable: every statement still needs a choice */
+.reveal .lp-likert-classic .likert-submit:disabled:not(.sent) {
+  opacity: 0.45;
+  background-color: var(--r-link-color, #2a76dd);
 }
 
 /* word cloud */

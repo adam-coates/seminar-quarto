@@ -196,13 +196,33 @@ local function layout_attr(el, id)
   return nil
 end
 
+-- Chart styling keys, the same as a .poll-results div takes. `livepoll:
+-- chart:` in the front matter sets them deck-wide; a div's own attribute wins.
+local CHART_KEYS = {
+  "font-size", "x-tick-size", "y-tick-size", "legend-size",
+  "legend", "color", "grid-color", "label-wrap",
+}
+local chart_defaults = {}
+
 local function read_layout(meta)
-  if not meta.livepoll or not meta.livepoll.layout then return nil end
-  local v = pandoc.utils.stringify(meta.livepoll.layout)
-  if LAYOUTS[v] then
-    default_layout = LAYOUTS[v]
-  else
-    quarto.log.warning("livepoll: unknown layout '" .. v .. "' (use classic or embedded), using classic.")
+  if not meta.livepoll then return nil end
+  if meta.livepoll.layout then
+    local v = pandoc.utils.stringify(meta.livepoll.layout)
+    if LAYOUTS[v] then
+      default_layout = LAYOUTS[v]
+    else
+      quarto.log.warning("livepoll: unknown layout '" .. v .. "' (use classic or embedded), using classic.")
+    end
+  end
+  local chart = meta.livepoll.chart
+  if chart ~= nil then
+    if pandoc.utils.type(chart) ~= "table" then
+      quarto.log.warning("livepoll: `chart:` should be a map of chart settings; ignored.")
+    else
+      for _, key in ipairs(CHART_KEYS) do
+        if chart[key] ~= nil then chart_defaults[key] = tostring(meta_value(chart[key])) end
+      end
+    end
   end
   return nil
 end
@@ -585,12 +605,125 @@ local function poll_html(id)
   return table.concat(out, "\n")
 end
 
-local function results_html(id, orientation, height, show_question)
+------------------------------------------------------------ chart styling
+
+-- A long label as lines, which Chart.js draws one under the other; a label
+-- that fits stays a plain string.
+local function wrap_label(text, width)
+  local lines, line = {}, ""
+  for word in text:gmatch("%S+") do
+    if line ~= "" and utf8.len(line .. " " .. word) > width then
+      lines[#lines + 1] = line
+      line = word
+    else
+      line = line == "" and word or (line .. " " .. word)
+    end
+  end
+  if line ~= "" then lines[#lines + 1] = line end
+  return #lines > 1 and lines or text
+end
+
+local LEGEND_POSITIONS = { top = true, bottom = true, left = true, right = true }
+
+-- The styling asked for on one .poll-results div, over the deck's defaults.
+-- Sizes are px (a trailing "px" is allowed); anything unusable is a warning
+-- and the setting is left out.
+local function chart_settings(attrs, where)
+  -- A setting comes from the div, else the deck's `chart:`. A value that will
+  -- not do is a warning, and the next source is tried, so a typo on one chart
+  -- falls back to the deck's choice rather than to the extension's.
+  local function first(key, parse)
+    for _, source in ipairs({ { attrs[key], where }, { chart_defaults[key], "livepoll: chart:" } }) do
+      local v, from = source[1], source[2]
+      if v ~= nil then
+        local ok, value, problem = parse(tostring(v))
+        if ok then return value end
+        quarto.log.warning("livepoll: " .. from .. ": " .. key .. "=\"" .. tostring(v) .. "\" " .. problem .. "; ignored.")
+      end
+    end
+    return nil
+  end
+  local function size(key)
+    return first(key, function(v)
+      local n = tonumber((v:gsub("%s*px$", "")))
+      if n and n > 0 then return true, n end
+      return false, nil, "should be a size in px"
+    end)
+  end
+  local legend = first("legend", function(v)
+    v = v:lower()
+    if v == "false" or v == "no" or v == "none" then return true, false end
+    if v == "true" or v == "yes" then return true, true end
+    if LEGEND_POSITIONS[v] then return true, v end
+    return false, nil, "should be top, bottom, left, right or false"
+  end)
+  local function text(key)
+    return first(key, function(v) return true, v end)
+  end
+  return {
+    font = size("font-size"),
+    x = size("x-tick-size"),
+    y = size("y-tick-size"),
+    legend_size = size("legend-size"),
+    legend = legend,
+    color = text("color"),
+    grid = text("grid-color"),
+    wrap = size("label-wrap"),
+  }
+end
+
+-- Apply settings to a chart's options. `base` is the chart type's own
+-- defaults: { font = px or nil, legend = false or a position }. Nothing is
+-- set that neither asked for, so an unstyled chart keeps the extension's
+-- chart defaults (_extension.yml).
+local function style_chart(options, st, base)
+  -- Tables are only created for settings in use: the JSON encoder writes an
+  -- empty Lua table as [], which Chart.js would take for an array of options.
+  local tick = { x = st.x or st.font or base.font, y = st.y or st.font or base.font }
+  for _, axis in ipairs({ "x", "y" }) do
+    if tick[axis] or st.color or st.grid then
+      local scale = options.scales[axis] or {}
+      options.scales[axis] = scale
+      if tick[axis] or st.color then scale.ticks = scale.ticks or {} end
+      if tick[axis] then scale.ticks.font = { size = tick[axis] } end
+      if st.color then scale.ticks.color = st.color end
+      if st.grid then scale.grid = { color = st.grid } end
+    end
+  end
+
+  local position = base.legend
+  if st.legend == false then
+    position = false
+  elseif st.legend == true then
+    position = position or "top"
+  elseif st.legend then
+    position = st.legend
+  end
+  local legend = { display = position ~= false }
+  if position then legend.position = position end
+  local legend_size = st.legend_size or st.font or base.font
+  local labels = {}
+  if legend_size then
+    labels.font = { size = legend_size }
+    labels.boxWidth = legend_size
+    labels.padding = 12
+  end
+  if st.color then labels.color = st.color end
+  if next(labels) then legend.labels = labels end
+  options.plugins = options.plugins or {}
+  options.plugins.legend = legend
+end
+
+local function results_html(id, orientation, height, show_question, st)
   local poll = polls[id]
   local labels, zeros = {}, {}
   for _, opt in ipairs(poll.options) do
     table.insert(labels, opt.label)
     table.insert(zeros, "0")
+  end
+
+  if st.wrap then
+    for i, label in ipairs(labels) do labels[i] = wrap_label(label, st.wrap) end
   end
 
   local horizontal = orientation ~= "vertical"
@@ -612,6 +745,10 @@ local function results_html(id, orientation, height, show_question)
       maintainAspectRatio = false,
     },
   }
+  -- A poll chart is one unnamed set of bars: a legend would be an empty
+  -- swatch, so it stays off (chart_settings warned if one was asked for).
+  st.legend = false
+  style_chart(chart.options, st, { legend = false })
 
   local out = {}
   if show_question then out[#out + 1] = question_html(id) end
@@ -798,32 +935,35 @@ end
 
 ------------------------------------------------------------ likert markup
 
--- The scale under the statements, for the classic slide: "Scale: a · b · c",
--- or for a numeric scale with named ends "Scale: 0 (never) to 10 (always)".
-local function likert_scale_text(likert)
-  local labels = likert.labels
-  if likert.anchors then
-    return string.format("%s (%s) to %s (%s)", labels[1], likert.anchors[1],
-      labels[#labels], likert.anchors[2])
-  end
-  return table.concat(labels, " · ")
-end
-
--- classic: the question slide shows what is being rated; phones do the rating
+-- classic: the question slide is the voting slide, as for a poll. Each
+-- statement gets a row of buttons, one per point, and a Submit button sends the
+-- lot (livepoll.js, initClassicLikerts). Deliberately not inside a `.poll`:
+-- poll.js claims every `.poll` element's buttons as poll votes.
 local function likert_html(id)
   local likert = likerts[id]
   local eid = html_escape(id)
   local out = {}
   if likert.show_question then out[#out + 1] = question_html(id, likert.question) end
-  out[#out + 1] = '<div class="likert lp-likert-classic" data-likert="' .. eid .. '">'
-  if not likert.single then
-    out[#out + 1] = '<ul class="likert-statements">'
-    for _, s in ipairs(likert.statements) do
-      out[#out + 1] = "<li>" .. html_escape(s) .. "</li>"
+  out[#out + 1] = '<div class="likert lp-likert-classic' .. (likert.numeric and " likert-numeric" or "")
+    .. '" data-likert="' .. eid .. '" style="--lp-points:' .. #likert.labels .. '">'
+  for s, statement in ipairs(likert.statements) do
+    out[#out + 1] = '<div class="likert-statement">'
+    if not likert.single then
+      out[#out + 1] = '<div class="likert-statement-text">' .. html_escape(statement) .. "</div>"
     end
-    out[#out + 1] = "</ul>"
+    out[#out + 1] = '<div class="likert-choices">'
+    for p, label in ipairs(likert.labels) do
+      out[#out + 1] = '<button type="button" class="likert-choice" data-s="' .. (s - 1)
+        .. '" data-p="' .. (p - 1) .. '">' .. html_escape(label) .. "</button>"
+    end
+    out[#out + 1] = "</div>"
+    if likert.anchors then
+      out[#out + 1] = '<div class="likert-anchors"><span>' .. html_escape(likert.anchors[1])
+        .. "</span><span>" .. html_escape(likert.anchors[2]) .. "</span></div>"
+    end
+    out[#out + 1] = "</div>"
   end
-  out[#out + 1] = '<p class="likert-scale-note">Scale: ' .. html_escape(likert_scale_text(likert)) .. "</p>"
+  out[#out + 1] = '<button type="button" class="likert-submit" disabled>Submit</button>'
   out[#out + 1] = "</div>"
   out[#out + 1] = '<p class="poll-voters">Responses: <span class="likert-voters" data-likert="'
     .. eid .. '">0</span></p>'
@@ -860,7 +1000,12 @@ end
 
 -- classic results: one stacked bar per statement, one segment per point. The
 -- dataset labels go through the chart plugin's CSV, which splits on commas.
-local function likert_results_html(id, height, show_question)
+-- Text sizes for this chart, in px. The extension's chart default (30, set in
+-- _extension.yml for poll bars) is far too big for statements and a legend of
+-- five to eleven points: Chart.js then drops statement labels it cannot fit.
+local LIKERT_CHART_FONT = 16
+
+local function likert_results_html(id, height, show_question, orientation, st)
   local likert = likerts[id]
   local eid = html_escape(id)
   local colours = likert_colours(likert)
@@ -871,36 +1016,29 @@ local function likert_results_html(id, height, show_question)
     for _ = 1, #likert.statements do zeros[#zeros + 1] = "0" end
     rows[#rows + 1] = label:gsub(",", ";") .. ", " .. table.concat(zeros, ", ")
   end
-  -- Chart.js draws an array label as lines; without wrapping, a long
-  -- statement is cut off at the chart's left edge
-  local function wrap(text, width)
-    local lines, line = {}, ""
-    for word in text:gmatch("%S+") do
-      if line ~= "" and utf8.len(line .. " " .. word) > width then
-        lines[#lines + 1] = line
-        line = word
-      else
-        line = line == "" and word or (line .. " " .. word)
-      end
-    end
-    if line ~= "" then lines[#lines + 1] = line end
-    return #lines > 1 and lines or text
-  end
+  -- horizontal (default): a bar per statement, statements down the left.
+  -- vertical: a column per statement, statements along the bottom, wrapped
+  -- narrower since they share the width.
+  local vertical = orientation == "vertical"
   local labels = {}
-  for i, statement in ipairs(likert.statements) do labels[i] = wrap(statement, 24) end
+  for i, statement in ipairs(likert.statements) do
+    -- Chart.js draws an array label as lines; unwrapped, a long statement
+    -- is cut off at the chart's edge
+    labels[i] = wrap_label(statement, st.wrap or (vertical and 18 or 30))
+  end
+  -- every statement labelled (autoSkip off), the counts never slanted
+  local category = { stacked = true, ticks = { autoSkip = false, maxRotation = 0 } }
+  local value = { stacked = true, beginAtZero = true, ticks = { precision = 0, maxRotation = 0 } }
   local chart = {
     data = { labels = labels, datasets = datasets },
     options = {
-      indexAxis = "y",
-      plugins = { legend = { display = true, position = "bottom" } },
-      scales = {
-        x = { stacked = true, beginAtZero = true, ticks = { precision = 0 } },
-        y = { stacked = true },
-      },
+      indexAxis = vertical and "x" or "y",
+      scales = vertical and { x = category, y = value } or { x = value, y = category },
       responsive = false, -- sized by livepoll.js, as for polls
       maintainAspectRatio = false,
     },
   }
+  style_chart(chart.options, st, { font = LIKERT_CHART_FONT, legend = "bottom" })
   local out = {}
   if show_question then out[#out + 1] = question_html(id, likert.question) end
   out[#out + 1] = '<div class="poll-results" style="position:relative;height:' .. height .. ';width:100%;">'
@@ -1047,15 +1185,27 @@ local function generate_div(el)
       return nil
     end
     if likerts[id] then
+      local orientation = el.attributes["orientation"]
+      if orientation ~= nil and orientation ~= "horizontal" and orientation ~= "vertical" then
+        quarto.log.warning("livepoll: .poll-results for '" .. id .. "': orientation should be horizontal or vertical, got '"
+          .. orientation .. "'; using horizontal.")
+        orientation = nil
+      end
       return pandoc.RawBlock("html", likert_results_html(
         id,
         el.attributes["height"] or "360px",
-        truthy(el.attributes["show-question"]) == true
+        truthy(el.attributes["show-question"]) == true,
+        orientation,
+        chart_settings(el.attributes, ".poll-results for '" .. id .. "'")
       ))
     end
     if not polls[id] then
       quarto.log.warning("livepoll: .poll-results refers to unknown poll '" .. id .. "'.")
       return nil
+    end
+    if el.attributes["legend"] or el.attributes["legend-size"] then
+      quarto.log.warning("livepoll: .poll-results for '" .. id .. "': a poll chart has no legend "
+        .. "(legend= and legend-size= are for rating scales); ignored.")
     end
     return pandoc.RawBlock(
       "html",
@@ -1063,7 +1213,8 @@ local function generate_div(el)
         id,
         el.attributes["orientation"],
         el.attributes["height"] or "360px",
-        truthy(el.attributes["show-question"]) == true
+        truthy(el.attributes["show-question"]) == true,
+        chart_settings(el.attributes, ".poll-results for '" .. id .. "'")
       )
     )
   end
@@ -1409,7 +1560,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "1.6.0",
+    version = "1.7.0",
     scripts = { "qrcode.js", "livepoll.js" },
     stylesheets = { "livepoll.css" },
   })

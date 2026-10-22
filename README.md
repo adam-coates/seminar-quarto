@@ -163,8 +163,9 @@ How confident are you running a t-test in R?
 In the embedded layout a worded scale is drawn as one diverging bar per
 statement (disagree left of the line, agree right) and a numeric scale as a
 histogram per statement with its mean and median. In the classic layout the
-question slide lists the statements and the scale, and a
-`.poll-results for="feedback"` slide shows a stacked bar chart.
+question slide has a row of buttons per statement and a Submit button, like a
+classic poll's buttons, and a `.poll-results for="feedback"` slide shows a
+stacked bar chart.
 
 ## Layouts
 
@@ -217,10 +218,46 @@ Which of these is a systematic error?
 | attribute | on | meaning |
 | --- | --- | --- |
 | `for` | `.poll-results` | the poll's or rating scale's id (required) |
-| `orientation` | `.poll-results` | `horizontal` (default) or `vertical`; polls only |
+| `orientation` | `.poll-results` | `horizontal` (default) or `vertical`, for polls and rating scales |
 | `height` | `.poll-results`, `.wordcloud` | box height, default `360px` |
 | `show-question` | `.poll`, `.poll-results`, `.wordcloud`, `.likert` | print the question (or not) |
 | `size`, `url`, `caption` | `.poll-qr` | QR size in px, a different target, `caption="false"` hides the URL |
+
+### Styling the charts
+
+Each `.poll-results` chart can be styled on its own:
+
+```markdown
+::: {.poll-results for="feedback" orientation="vertical" x-tick-size="20" y-tick-size="14" legend="right" legend-size="13" color="#444" grid-color="#eee" label-wrap="14"}
+:::
+```
+
+| attribute | what it sets |
+| --- | --- |
+| `font-size` | all of the chart's text: both axes and the legend |
+| `x-tick-size`, `y-tick-size` | the bottom and the left axis labels, overriding `font-size` |
+| `legend-size` | the legend text, overriding `font-size` |
+| `legend` | `top`, `bottom`, `left`, `right`, or `false` to hide it (rating scales; a poll chart has no legend) |
+| `color` | the colour of the chart's text |
+| `grid-color` | the colour of the grid lines |
+| `label-wrap` | wrap option and statement labels at about this many characters |
+
+Sizes are in pixels (`18` or `18px`). x and y are the chart's own axes, so
+in a horizontal chart x is the counts and y the options or statements; in a
+vertical chart it is the other way round.
+
+The same settings under `livepoll: chart:` apply to every chart in the deck,
+and a chart's own attributes override them:
+
+```yaml
+livepoll:
+  chart:
+    color: "#444"
+    font-size: 18
+```
+
+Unstyled, a poll chart uses the extension's chart defaults (30px text) and a
+rating-scale chart 16px text with the legend at the bottom.
 
 `chartjs` and `panel` are accepted as older names for `classic` and
 `embedded`.
@@ -322,7 +359,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-1.6.0/`), with no cache-busting. If you change the
+version (`livepoll-1.7.0/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.
