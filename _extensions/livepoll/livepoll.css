@@ -1,0 +1,692 @@
+/* livepoll — presenter control panel. Deliberately outside the reveal scale
+   context (fixed, px units) so it stays legible whatever the deck theme does. */
+
+/* ---------------------------------------------------------------- slides */
+
+.reveal .poll button {
+  display: block;
+  margin: 0.35em auto;
+  padding: 0.4em 1.2em;
+  font-size: 0.75em;
+  min-width: 60%;
+  cursor: pointer;
+}
+
+.reveal .poll button.selected {
+  background-color: #2e9e4f;
+  color: white;
+}
+
+.reveal .poll-voters {
+  margin-top: 0.8em;
+  color: gray;
+  font-size: 0.6em;
+}
+
+.reveal .poll-answer {
+  margin-top: 0.5em;
+  text-align: center;
+  font-size: 0.7em;
+  color: #2e9e4f;
+}
+
+/* word cloud */
+.reveal .wordcloud {
+  margin: 0 auto;
+}
+
+.reveal .wordcloud-word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 1;
+  /* the whole point: a word that gains a vote grows and slides to its new
+     place instead of the cloud being repainted from scratch */
+  transition:
+    transform 550ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    font-size 550ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    color 550ms linear,
+    opacity 350ms ease;
+}
+
+/* first frame for a word that has just appeared */
+.reveal .wordcloud-word.entering {
+  opacity: 0;
+}
+
+.reveal .wordcloud-word.leaving {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .wordcloud-word {
+    transition: opacity 200ms ease;
+  }
+}
+
+.reveal .wordcloud-empty {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  margin: 0;
+  text-align: center;
+  color: gray;
+  font-size: 0.6em;
+}
+
+/* QR code block */
+.reveal .livepoll-qr {
+  text-align: center;
+}
+
+.reveal .livepoll-qr-code {
+  display: inline-block;
+  max-width: 100%;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+}
+
+.reveal .livepoll-qr-code svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.reveal .livepoll-qr-url {
+  margin-top: 0.5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.4em;
+  color: gray;
+  overflow-wrap: anywhere;
+}
+
+/* -------------------------------------------------------- panel layout */
+
+/* layout="panel": the question on one slide, options as bar rows, QR and count
+   in a column on the right. Coloured from the reveal theme's variables, so it
+   follows the deck's palette. The selectors carry .livepoll-question to outrank
+   both the classic `.reveal .poll button` rules above and a theme's own
+   `.reveal .slides .poll button`. */
+
+.reveal .livepoll-question {
+  --lp-fg: var(--r-main-color, #222);
+  --lp-bg: var(--r-background-color, #fff);
+  --lp-accent: var(--r-link-color, #2a76dd);
+  --lp-muted: color-mix(in srgb, var(--lp-fg) 60%, var(--lp-bg));
+  --lp-faint: color-mix(in srgb, var(--lp-fg) 35%, var(--lp-bg));
+  --lp-track: color-mix(in srgb, var(--lp-fg) 8%, var(--lp-bg));
+  --lp-line: color-mix(in srgb, var(--lp-fg) 16%, var(--lp-bg));
+  --lp-good: color-mix(in oklab, #16a34a 88%, var(--lp-fg));
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.75em;
+  box-sizing: border-box;
+  height: 480px; /* replaced by livepoll.js with the space left on the slide */
+  margin: 0.5em 0 0;
+  font-size: 0.6em;
+  line-height: 1.3;
+  text-align: left;
+  color: var(--lp-fg);
+}
+
+.reveal .livepoll-question .lp-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.reveal .livepoll-question .poll-question {
+  margin: 0 0 0.6em;
+  font-size: 1.15em;
+  text-align: left;
+}
+
+/* the answer fragment is a step, not something to read: the row shows it */
+.reveal .livepoll-question .lp-step {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* ---- bars ---- */
+
+.reveal .livepoll-question .lp-bars {
+  --lp-fit: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(0.8em * var(--lp-fit));
+  font-size: calc(1em * var(--lp-fit));
+}
+
+.reveal .livepoll-question .poll button.lp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.4em;
+  grid-template-areas:
+    "label label"
+    "track stat";
+  column-gap: 0.7em;
+  row-gap: 0.3em;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2em 0.3em;
+  border: 1px solid transparent;
+  border-radius: 0.4em;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.5s ease, border-color 0.15s ease;
+}
+
+.reveal .livepoll-question .poll button.lp-row:hover:not(:disabled) {
+  background: none;
+  border-color: var(--lp-line);
+}
+
+.reveal .livepoll-question .poll button.lp-row:disabled {
+  cursor: default;
+  color: inherit;
+}
+
+/* a participant's own vote, when they vote from the deck itself */
+.reveal .livepoll-question .poll button.lp-row.selected {
+  background: none;
+  color: inherit;
+  border-color: var(--lp-accent);
+}
+
+.reveal .livepoll-question .lp-label {
+  grid-area: label;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.reveal .livepoll-question .lp-track {
+  grid-area: track;
+  height: 1.2em;
+  border-radius: 0.3em;
+  background: var(--lp-track);
+  overflow: hidden;
+}
+
+.reveal .livepoll-question .lp-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 0.3em;
+  background: color-mix(in srgb, var(--lp-accent) 72%, var(--lp-bg));
+  transition:
+    width 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.4s ease;
+}
+
+.reveal .livepoll-question .lp-row.lp-lead .lp-fill {
+  background: var(--lp-accent);
+}
+
+.reveal .livepoll-question .lp-stat {
+  grid-area: stat;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .livepoll-question .lp-n {
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+.reveal .livepoll-question .lp-pct {
+  color: var(--lp-muted);
+  font-size: 0.85em;
+}
+
+/* after the answer: the correct row green with a check, the rest dimmed */
+.reveal .livepoll-question .lp-row.lp-correct .lp-fill {
+  background: var(--lp-good);
+}
+.reveal .livepoll-question .lp-row.lp-correct .lp-label {
+  font-weight: 700;
+}
+.reveal .livepoll-question .lp-row.lp-correct .lp-label::after {
+  content: "\2713";
+  margin-left: 0.4em;
+  color: var(--lp-good);
+  font-weight: 800;
+}
+.reveal .livepoll-question .lp-row.lp-dim {
+  opacity: 0.5;
+}
+.reveal .livepoll-question .lp-row.lp-dim .lp-fill {
+  background: color-mix(in srgb, var(--lp-fg) 30%, var(--lp-bg));
+}
+
+/* ---- results hidden ---- */
+
+.reveal .livepoll-question .lp-veil {
+  display: none;
+}
+
+.reveal .livepoll-question.lp-results-hidden .lp-fill,
+.reveal .livepoll-question.lp-results-hidden .lp-stat {
+  visibility: hidden;
+}
+
+.reveal .livepoll-question.lp-results-hidden .lp-track {
+  opacity: 0.55;
+}
+
+.reveal .livepoll-question.lp-results-hidden .lp-veil {
+  display: block;
+  align-self: flex-start;
+  margin-top: 0.6em;
+  padding: 0.25em 0.8em;
+  border: 1px dashed var(--lp-line);
+  border-radius: 999px;
+  color: var(--lp-muted);
+  font-size: 0.65em;
+  letter-spacing: 0.04em;
+}
+
+/* ---- word cloud ---- */
+
+.reveal .livepoll-question .wordcloud.lp-cloud {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--r-heading-font, inherit);
+}
+
+.reveal .livepoll-question .lp-cloud .wordcloud-word {
+  color: var(--lp-accent);
+}
+.reveal .livepoll-question .lp-cloud .wordcloud-word[data-tone="1"] {
+  color: color-mix(in oklab, var(--lp-accent) 70%, var(--lp-fg));
+}
+.reveal .livepoll-question .lp-cloud .wordcloud-word[data-tone="2"] {
+  color: var(--lp-fg);
+}
+.reveal .livepoll-question .lp-cloud .wordcloud-word[data-tone="3"] {
+  color: color-mix(in oklab, var(--lp-accent) 45%, var(--lp-fg));
+}
+
+.reveal .livepoll-question .lp-cloud .wordcloud-empty {
+  color: var(--lp-faint);
+  font-size: 1.1em;
+}
+
+/* ---- side column: QR, URL, count ---- */
+
+.reveal .livepoll-question .lp-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  width: 11.5em;
+  min-height: 0;
+}
+
+.reveal .livepoll-question .lp-qr {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  padding: 0.3em;
+  border-radius: 0.5em;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px var(--lp-line),
+    0 0.3em 1.2em color-mix(in srgb, #000 12%, transparent);
+}
+
+.reveal .livepoll-question .lp-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.reveal .livepoll-question .lp-url {
+  max-width: 100%;
+  font-family: var(--r-code-font, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.72em;
+  font-weight: 600;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.reveal .livepoll-question .lp-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  margin-top: 0.3em;
+}
+
+.reveal .livepoll-question .lp-count-n {
+  font-size: 2.1em;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .livepoll-question .lp-count-label {
+  color: var(--lp-muted);
+}
+
+.reveal .livepoll-question .lp-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font-size: 0.68em;
+}
+
+.reveal .livepoll-question .lp-joined {
+  color: var(--lp-muted);
+}
+.reveal .livepoll-question .lp-joined:empty {
+  display: none;
+}
+
+.reveal .livepoll-question .lp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.2em 0.75em;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  background: var(--lp-track);
+  color: var(--lp-muted);
+}
+.reveal .livepoll-question .lp-pill::before {
+  content: "";
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: currentColor;
+}
+.reveal .livepoll-question .lp-pill[data-state="live"] {
+  background: color-mix(in srgb, var(--lp-good) 16%, transparent);
+  color: var(--lp-good);
+}
+.reveal .livepoll-question .lp-pill[data-state="live"]::before {
+  animation: lp-pulse 1.6s ease-in-out infinite;
+}
+.reveal .livepoll-question .lp-pill[data-state="offline"] {
+  background: color-mix(in srgb, #dc2626 14%, transparent);
+  color: color-mix(in oklab, #dc2626 88%, var(--lp-fg));
+}
+@keyframes lp-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .livepoll-question .lp-fill {
+    transition: none;
+  }
+  .reveal .livepoll-question .lp-pill[data-state="live"]::before {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------- full-screen QR (Shift+Q) */
+
+/* Outside .reveal, fixed and in viewport units, like the control panel. */
+#livepoll-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--r-background-color, #fff) 94%, transparent);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+#livepoll-overlay[hidden] {
+  display: none !important;
+}
+
+.livepoll-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.2vh;
+}
+
+.livepoll-overlay-title {
+  font-family: var(--r-heading-font, sans-serif);
+  font-size: 6.5vh;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--r-main-color, #222);
+}
+
+.livepoll-overlay-qr {
+  box-sizing: border-box;
+  width: min(66vh, 86vw);
+  aspect-ratio: 1;
+  padding: 1.2vh;
+  border-radius: 2vh;
+  background: #fff;
+  box-shadow: 0 1vh 5vh color-mix(in srgb, #000 22%, transparent);
+}
+.livepoll-overlay-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.livepoll-overlay-url {
+  font-family: var(--r-code-font, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 4.6vh;
+  font-weight: 700;
+  color: var(--r-link-color, #2a76dd);
+}
+
+/* ------------------------------------------------------- control panel */
+
+/* Default corner is top-right: bottom-left belongs to reveal's own menu button
+   and bottom-right to the slide number. Set `livepoll: position:` in the deck
+   front matter to move it, or restyle #livepoll-toggle in your own CSS. */
+#livepoll-toggle {
+  position: fixed;
+  z-index: 60;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.2s ease;
+}
+
+#livepoll-toggle:hover {
+  opacity: 1;
+}
+
+#livepoll-toggle.livepoll-top-right {
+  top: 14px;
+  right: 14px;
+}
+
+#livepoll-toggle.livepoll-top-left {
+  top: 14px;
+  left: 14px;
+}
+
+#livepoll-toggle.livepoll-bottom-right {
+  bottom: 14px;
+  right: 14px;
+}
+
+/* Sits above reveal's menu button rather than on top of it. */
+#livepoll-toggle.livepoll-bottom-left {
+  bottom: 60px;
+  left: 14px;
+}
+
+/* The same controls in the "Live poll" tab of the reveal menu, which is
+   already dark (#333); the rules below style both places. */
+#livepoll-menu-slot {
+  padding: 0 16px 16px;
+  color: #eee;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  text-align: left;
+}
+
+/* Quarto's menu draws its tab icons as inline SVG per class name. */
+.slide-menu-wrapper .slide-menu-toolbar .fa-tower-broadcast::before {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="white" viewBox="0 0 16 16"><path d="M3.05 3.05a7 7 0 0 0 0 9.9.5.5 0 0 1-.707.707 8 8 0 0 1 0-11.314.5.5 0 0 1 .707.707zm2.122 2.122a4 4 0 0 0 0 5.656.5.5 0 1 1-.708.708 5 5 0 0 1 0-7.072.5.5 0 0 1 .708.708zm5.656-.708a.5.5 0 0 1 .708 0 5 5 0 0 1 0 7.072.5.5 0 1 1-.708-.708 4 4 0 0 0 0-5.656.5.5 0 0 1 0-.708zm2.122-2.12a.5.5 0 0 1 .707 0 8 8 0 0 1 0 11.313.5.5 0 0 1-.707-.707 7 7 0 0 0 0-9.9.5.5 0 0 1 0-.707zM10 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/></svg>');
+}
+
+#livepoll-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 61;
+  width: 320px;
+  height: 100%;
+  padding: 14px 16px;
+  overflow-y: auto;
+  background: #1c1c1c;
+  color: #eee;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+}
+
+#livepoll-panel.open {
+  transform: translateX(0);
+}
+
+#livepoll-panel .livepoll-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #444;
+  font-weight: 600;
+}
+
+#livepoll-panel .livepoll-close {
+  border: none;
+  background: none;
+  color: #aaa;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#livepoll-panel h3,
+#livepoll-menu-slot h3 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ecbff;
+}
+
+#livepoll-panel table,
+#livepoll-menu-slot table {
+  width: 100%;
+  margin-bottom: 8px;
+  border: none;
+}
+
+#livepoll-panel td,
+#livepoll-menu-slot td {
+  padding: 2px 4px 2px 0;
+  border: none;
+}
+
+#livepoll-panel input,
+#livepoll-menu-slot input,
+#livepoll-panel select,
+#livepoll-menu-slot select {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #eee;
+  font-size: 13px;
+}
+
+#livepoll-panel button,
+#livepoll-menu-slot button {
+  margin: 8px 8px 0 0;
+  padding: 6px 16px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #333;
+  color: #eee;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#livepoll-panel button:hover,
+#livepoll-menu-slot button:hover {
+  background: #444;
+}
+
+#livepoll-panel .livepoll-close:hover {
+  background: none;
+  color: #fff;
+}
+
+#livepoll-panel #logger,
+#livepoll-menu-slot #logger {
+  width: 100%;
+  height: 150px;
+  padding: 6px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: black;
+  color: white;
+  font-family: monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+
+#livepoll-panel .livepoll-hint,
+#livepoll-menu-slot .livepoll-hint {
+  margin-top: 10px;
+  color: #888;
+  font-size: 12px;
+}
+
+#livepoll-panel p,
+#livepoll-menu-slot p {
+  margin: 6px 0;
+}
