@@ -45,7 +45,14 @@ const initSeminar = function (Reveal) {
     return;
   }
 
-  const logger = seminar.logger || defaultLogger;
+  // livepoll: the config can name the logger as a string ("seminarStatusLogger")
+  // rather than being a function reference. Quarto serialises the reveal config
+  // as JSON, so a function reference could only ever be spliced in afterwards —
+  // which is exactly what postprocess.py used to do.
+  var logger = seminar.logger || defaultLogger;
+  if (typeof logger === "string") {
+    logger = window[logger] || defaultLogger;
+  }
 
   var socket = io.connect(seminar.server, {
     transports: ["websocket"],
@@ -447,6 +454,7 @@ console.log(rooms);
       // forward custom events to other plugins
       var event = new CustomEvent("received");
       event.content = content.custom;
+      event.sender = sender;
       document.dispatchEvent(event);
     }
   });
@@ -465,6 +473,11 @@ console.log(rooms);
       // forward custom events to other plugins
       var event = new CustomEvent("received");
       event.content = content;
+      // Who sent it. The relay names the sender on every message and this used
+      // to be dropped on the floor, which left the poll plugin counting vote
+      // *messages* rather than people: one participant reloading the page and
+      // voting again counted twice.
+      event.sender = sender;
       document.dispatchEvent(event);
     }
   });

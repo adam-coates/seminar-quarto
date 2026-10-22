@@ -1,9 +1,0 @@
-[project]
-name = "seminar-quarto"
-version = "0.1.0"
-description = "Post process script for quarto rendering to revealjs so that the seminar plugin works"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "bs4>=0.0.2",
-]

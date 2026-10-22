@@ -1,61 +1,90 @@
 ---
-title: Quarto and seminar plugin
-format: 
+title: "Live polls for Quarto revealjs"
+subtitle: "Polls and word clouds over a seminar socket.io server"
+format:
   revealjs:
-    self-contained: true
     revealjs-plugins:
-        - seminar
-    include-after-body: custom.js
-    menu:
-      themes: false
-      transitions: false
-      markers: true
-      hideMissingTitles: true
-      custom:
-        - title: "Broadcast"
-          icon: '<i class="fas fa-rss"></i>'
-          content: foobar
+      - livepoll
+filters:
+  - livepoll
+# Top level, not under `format:`: the filter reads it to configure poll.html.
+seminar:
+  server: "https://seminar.adamcoates.at/"
+  url: "seminar-quarto-demo"   # the venue
+  room: "demo"
+  # bcrypt hash of the host password. Replace it with your own (see README):
+  # with this placeholder the deck renders and runs, but hosting is refused.
+  hash: "$2a$05$REPLACE.THIS.WITH.YOUR.OWN.BCRYPT.HASH.SEE.README.."
+livepoll:
+  layout: embedded             # classic | embedded; per question with layout="..."
 ---
 
+## Join in
 
-## Seminar
+Scan to open the poll page, or press **Shift+Q** for a full-screen QR code.
 
-- The seminar plugin allows to use a socket.io server so that the audience can follow along with the presentation on their own device
+::: {.poll-qr size="300"}
+:::
 
+::: {.notes}
+Open the menu (bottom left, or Shift+L), go to the **Live poll** tab, enter
+the password and press Start.
+:::
 
-- Use the menu to sign into become an admin
+## Which language do you use most?
 
+::: {.poll #lang}
+- R
+- Python
+- Julia
+- Something else
+:::
 
-- Remember to change the server, room name and generate hash 
+## What is the capital of Australia?
 
-- The password used to generate the hash can be used to log in as an admin.
+::: {.poll #capital}
+- [ ] Sydney
+- [x] Canberra
+- [ ] Melbourne
+- [ ] Perth
+:::
 
+::: {.notes}
+Press space to reveal the answer: the correct row turns green, and the phones
+show it too.
+:::
 
-## Step 1 
+## Before the reveal
 
-- Make changes to the plugin in seminar 
+::: {.poll #pvalue results="hidden"}
+A p-value of 0.03 means:
 
+- [ ] There is a 3% chance the null hypothesis is true
+- [x] Data this extreme would occur 3% of the time if the null were true
+- [ ] There is a 97% chance the result is real
+:::
 
-## Step 2 
+## One word for today?
 
-- make slides
+::: {.wordcloud #today max-words="2"}
+:::
 
-- Run `quarto render`
+## The classic layout
 
-or `quarto preview`
+::: {.poll #classic layout="classic"}
+Buttons here, the chart on the next slide.
 
+- [x] Looks good
+- [ ] Prefer the embedded one
+:::
 
-## Step 3
+## Classic results
 
-`pip install beautifulsoup4 requests`
+::: {.poll-results for="classic" show-question="true"}
+:::
 
-run the postprocess.py script 
+## A classic word cloud
 
-`python postprocess.py`
-
-
-
-
-
-
-
+::: {.wordcloud #classic-cloud layout="classic" max-words="1"}
+Describe this deck in one word.
+:::
