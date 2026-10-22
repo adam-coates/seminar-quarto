@@ -223,6 +223,42 @@ Which of these is a systematic error?
 | `show-question` | `.poll`, `.poll-results`, `.wordcloud`, `.likert` | print the question (or not) |
 | `size`, `url`, `caption` | `.poll-qr` | QR size in px, a different target, `caption="false"` hides the URL |
 
+### Styling the charts
+
+Each `.poll-results` chart can be styled on its own:
+
+```markdown
+::: {.poll-results for="feedback" orientation="vertical" x-tick-size="20" y-tick-size="14" legend="right" legend-size="13" color="#444" grid-color="#eee" label-wrap="14"}
+:::
+```
+
+| attribute | what it sets |
+| --- | --- |
+| `font-size` | all of the chart's text: both axes and the legend |
+| `x-tick-size`, `y-tick-size` | the bottom and the left axis labels, overriding `font-size` |
+| `legend-size` | the legend text, overriding `font-size` |
+| `legend` | `top`, `bottom`, `left`, `right`, or `false` to hide it (rating scales; a poll chart has no legend) |
+| `color` | the colour of the chart's text |
+| `grid-color` | the colour of the grid lines |
+| `label-wrap` | wrap option and statement labels at about this many characters |
+
+Sizes are in pixels (`18` or `18px`). x and y are the chart's own axes, so
+in a horizontal chart x is the counts and y the options or statements; in a
+vertical chart it is the other way round.
+
+The same settings under `livepoll: chart:` apply to every chart in the deck,
+and a chart's own attributes override them:
+
+```yaml
+livepoll:
+  chart:
+    color: "#444"
+    font-size: 18
+```
+
+Unstyled, a poll chart uses the extension's chart defaults (30px text) and a
+rating-scale chart 16px text with the legend at the bottom.
+
 `chartjs` and `panel` are accepted as older names for `classic` and
 `embedded`.
 
