@@ -5,4 +5,4 @@ project:
     - index.qmd
   # Puts poll.html (the participants' page) beside every rendered deck.
   post-render:
-    - _extensions/livepoll/copy-poll-page.lua
+    - _extensions/adam-coates/livepoll/copy-poll-page.lua
