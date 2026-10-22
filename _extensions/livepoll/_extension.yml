@@ -19,7 +19,7 @@ contributes:
           #         url: "my-course"      # venue
           #         room: "week-01"
           #         hash: "$2a$05$..."    # bcrypt hash of the host password
-          server: "https://seminar.adamcoates.at/"
+          server: "http://localhost:8080"
           autoJoin: true
           # resolved to window.seminarStatusLogger by seminar.js
           logger: seminarStatusLogger
@@ -31,7 +31,7 @@ contributes:
           defaults:
             maintainAspectRatio: false
             responsive: true
-            color: 'lightgray'
+            color: "lightgray"
             font:
               size: 30
             scale:
@@ -39,11 +39,11 @@ contributes:
               ticks:
                 stepSize: 1
               grid:
-                color: 'lightgray'
+                color: "lightgray"
           bar:
-            backgroundColor: ['firebrick', 'darkred', 'red']
+            backgroundColor: ["firebrick", "darkred", "red"]
           pie:
-            backgroundColor: [['black', 'red', 'green', 'yellow']]
+            backgroundColor: [["black", "red", "green", "yellow"]]
     - name: RevealPoll
       script:
         - poll.js
