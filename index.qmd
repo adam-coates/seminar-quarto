@@ -69,6 +69,25 @@ A p-value of 0.03 means:
 ::: {.wordcloud #today max-words="2"}
 :::
 
+## How did today go?
+
+::: {.likert #feedback scale="agree-5"}
+- The pace of today's lecture was right
+- The examples helped
+- I could follow the live coding
+:::
+
+## How confident are you running a t-test in R?
+
+::: {.likert #confidence scale="0-10" low="Not at all" high="Completely"}
+:::
+
+## How was the pace?
+
+::: {.likert #speed labels="Too slow|Just right|Too fast"}
+- Pace of today's lecture
+:::
+
 ## The classic layout
 
 ::: {.poll #classic layout="classic"}
@@ -81,6 +100,18 @@ Buttons here, the chart on the next slide.
 ## Classic results
 
 ::: {.poll-results for="classic" show-question="true"}
+:::
+
+## A classic rating scale
+
+::: {.likert #classic-likert layout="classic" scale="agree-7"}
+- The slides were easy to read
+- I would use live polls in my own teaching
+:::
+
+## Classic rating results
+
+::: {.poll-results for="classic-likert" show-question="true"}
 :::
 
 ## A classic word cloud

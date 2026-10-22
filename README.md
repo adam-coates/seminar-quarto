@@ -17,6 +17,8 @@ deck's front matter is all the configuration there is.
 - **Polls** from a plain Markdown list, with an optional correct answer that is
   revealed on cue (on the slide and on every phone).
 - **Word clouds**: words animate and grow as they are submitted.
+- **Rating scales (likert)**: statements rated agree–disagree or on a numeric
+  scale, shown as diverging bars or histograms.
 - **Two layouts**: `classic` (vote buttons, then a Chart.js chart on a results
   slide) and `embedded` (the whole question on one slide: bars fill live, with
   the QR code, URL, response count and a LIVE/CLOSED status beside them).
@@ -127,6 +129,43 @@ deck can override single keys (typically just `room`).
 `max-words` is how many words each person may send (default 3). **Clear
 words** in the Live poll tab wipes a cloud.
 
+### Rating scales
+
+```markdown
+## How did today go?
+
+::: {.likert #feedback scale="agree-5"}
+- The pace of today's lecture was right
+- The examples helped
+- I could follow the live coding
+:::
+```
+
+Each list item is a statement, all rated on the same scale; without a list the
+question itself is the one statement. Phones show a row of choices per
+statement and send them together.
+
+| `scale=` | points |
+| --- | --- |
+| `agree-5` (default) | Strongly disagree, Disagree, Neutral, Agree, Strongly agree |
+| `agree-7` | adds Somewhat disagree and Somewhat agree |
+| `0-10`, `1-5`, … | numeric, up to 11 points; `low="…"` and `high="…"` name the ends |
+
+`labels="Too slow|Just right|Too fast"` gives the points yourself (2 to 11,
+separated by `|`).
+
+```markdown
+::: {.likert #confidence scale="0-10" low="Not at all" high="Completely"}
+How confident are you running a t-test in R?
+:::
+```
+
+In the embedded layout a worded scale is drawn as one diverging bar per
+statement (disagree left of the line, agree right) and a numeric scale as a
+histogram per statement with its mean and median. In the classic layout the
+question slide lists the statements and the scale, and a
+`.poll-results for="feedback"` slide shows a stacked bar chart.
+
 ## Layouts
 
 Set the layout for the whole deck with `livepoll: layout:`, or for one question
@@ -153,7 +192,8 @@ A p-value of 0.03 means:
 | `qr="false"` | leave the QR code out of the side column |
 | `letters="true"` | label options A., B., C. (off by default in this layout) |
 
-Word clouds take `layout="embedded"` too, and get the same side column.
+Word clouds and rating scales take `layout="embedded"` too, and get the same
+side column. `results="hidden"` and `qr="false"` work on rating scales as well.
 
 ### `classic`
 
@@ -176,10 +216,10 @@ Which of these is a systematic error?
 
 | attribute | on | meaning |
 | --- | --- | --- |
-| `for` | `.poll-results` | the poll's id (required) |
-| `orientation` | `.poll-results` | `horizontal` (default) or `vertical` |
+| `for` | `.poll-results` | the poll's or rating scale's id (required) |
+| `orientation` | `.poll-results` | `horizontal` (default) or `vertical`; polls only |
 | `height` | `.poll-results`, `.wordcloud` | box height, default `360px` |
-| `show-question` | `.poll`, `.poll-results`, `.wordcloud` | print the question (or not) |
+| `show-question` | `.poll`, `.poll-results`, `.wordcloud`, `.likert` | print the question (or not) |
 | `size`, `url`, `caption` | `.poll-qr` | QR size in px, a different target, `caption="false"` hides the URL |
 
 `chartjs` and `panel` are accepted as older names for `classic` and
@@ -212,8 +252,8 @@ Other options under `livepoll:`:
 
 The vote tallies live only in the presenter's browser while the class runs.
 To keep them, press **Alt+R** in the presenting window before you close it:
-a `session.json` downloads with every poll's counts, every word cloud's words
-and, if the deck uses the
+a `session.json` downloads with every poll's counts, every word cloud's words,
+every rating scale's answers and, if the deck uses the
 [Excalidraw](https://github.com/parmsam/quarto-excalidraw) overlay, the
 drawings made over each slide.
 
@@ -221,7 +261,10 @@ Put that file next to the deck's `.qmd` and render again. The deck then opens
 showing what the room answered: bars and charts filled in, response counts
 set, word clouds drawn. No server is needed to view it.
 
-- Polls nobody voted in and empty clouds are left out of the file.
+- Polls nobody voted in, empty clouds and unanswered rating scales are left
+  out of the file.
+- A rating scale is only replayed if its statements and scale points still
+  match the recording; otherwise it is a render warning.
 - Results are matched to polls by `#id`, so keep the ids when editing a deck
   after class. An id that has gone from the deck is a render warning.
 - Present the re-rendered deck and press Alt+R again, and the replayed results
@@ -242,6 +285,9 @@ by hand:
   ],
   "clouds": [
     { "id": "today", "words": [ { "word": "fun", "count": 4 } ] }
+  ],
+  "likerts": [
+    { "id": "speed", "voters": 18, "counts": [ [4, 10, 4] ] }
   ]
 }
 ```
@@ -276,7 +322,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-1.5.0/`), with no cache-busting. If you change the
+version (`livepoll-1.6.0/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.
