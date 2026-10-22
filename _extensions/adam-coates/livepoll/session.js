@@ -169,6 +169,44 @@ const initSession = function (Reveal) {
   document.addEventListener("broadcast", onCloudMessage);
   document.addEventListener("received", onCloudMessage);
 
+  // ------------------------------------------------------------ likert
+
+  // id -> { question, slide, statements, labels, counts, voters }. The
+  // definition comes from the config block; the slide is the one holding the
+  // question (the classic results chart may sit on another).
+  const likerts = {};
+
+  function readLikertDefinitions() {
+    const config = deckConfig();
+    const declared = (config && config.likerts) || {};
+    Object.keys(declared).forEach(function (id) {
+      if (likerts[id]) return;
+      const el = document.querySelector('.likert[data-likert="' + cssEscape(id) + '"]');
+      likerts[id] = {
+        question: declared[id].question,
+        slide: el ? slideIdOf(el) : null,
+        statements: declared[id].statements,
+        labels: declared[id].labels,
+        counts: null,
+        voters: 0,
+      };
+    });
+  }
+
+  function onLikertMessage(event) {
+    const content = event && event.content;
+    if (!content || content.sender !== "likert-plugin" || content.type !== "counts") return;
+    const likert = likerts[content.likert];
+    if (!likert || !Array.isArray(content.counts)) return;
+    likert.counts = content.counts.map(function (row) {
+      return row.slice();
+    });
+    likert.voters = content.voters || 0;
+  }
+
+  document.addEventListener("broadcast", onLikertMessage);
+  document.addEventListener("received", onLikertMessage);
+
   // ----------------------------------------------------------- drawings
 
   // The Excalidraw overlay is a single scene for the whole deck, so an element
@@ -329,6 +367,24 @@ const initSession = function (Reveal) {
   async function buildSession() {
     readPollDefinitions();
     readCloudDefinitions();
+    readLikertDefinitions();
+
+    // counts[statement][point], in the deck's order; an unanswered scale is
+    // left out like an unopened poll
+    const recordedLikerts = [];
+    Object.keys(likerts).forEach(function (id) {
+      const likert = likerts[id];
+      if (!likert.counts || !likert.voters) return;
+      recordedLikerts.push({
+        id: id,
+        slide: likert.slide,
+        question: likert.question,
+        statements: likert.statements,
+        labels: likert.labels,
+        voters: likert.voters,
+        counts: likert.counts,
+      });
+    });
 
     const recordedClouds = [];
     Object.keys(clouds).forEach(function (id) {
@@ -389,9 +445,10 @@ const initSession = function (Reveal) {
       // since before a rebuild will keep running the old script and quietly
       // export a file missing whatever was added since. Stamping the version
       // turns that into something the reading end can name.
-      generator: "session.js/1.1",
+      generator: "session.js/1.2",
       polls: recorded,
       clouds: recordedClouds,
+      likerts: recordedLikerts,
       drawings: await renderDrawings(),
     };
   }
@@ -422,7 +479,9 @@ const initSession = function (Reveal) {
         session.polls.length +
         " poll(s), " +
         session.clouds.length +
-        " word cloud(s) and " +
+        " word cloud(s), " +
+        session.likerts.length +
+        " rating scale(s) and " +
         session.drawings.length +
         " drawing(s)."
     );
@@ -457,6 +516,7 @@ const initSession = function (Reveal) {
   Reveal.addEventListener("ready", function () {
     readPollDefinitions();
     readCloudDefinitions();
+    readLikertDefinitions();
     lastSlideId = currentSlideId();
   });
 };
