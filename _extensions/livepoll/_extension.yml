@@ -1,6 +1,6 @@
 title: Livepoll
 author: Adam Coates
-version: 1.4.0
+version: 1.5.0
 quarto-required: ">=1.4.0"
 contributes:
   filters:
@@ -47,3 +47,16 @@ contributes:
     - name: RevealPoll
       script:
         - poll.js
+    # Records the class: Alt+R downloads session.json (poll tallies, word-cloud
+    # counts, Excalidraw drawings). Put it beside the deck and re-render, and
+    # livepoll.lua replays the results on the slides.
+    - name: RevealSession
+      script:
+        - session.js
+      config:
+        session:
+          # Alt+R, not Alt+S: reveal opens the speaker view on S whatever the
+          # modifiers. session.js takes the key in the capture phase and stops
+          # it, so either is safe, but R avoids the question.
+          shortcut: "r"
+          filename: "session.json"

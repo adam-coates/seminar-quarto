@@ -766,6 +766,133 @@ local function seminar_config(meta)
   return merged
 end
 
+------------------------------------------------------- recorded session
+
+-- session.js (Alt+R) downloads session.json at the end of a class. Put it next
+-- to the deck's .qmd and re-render, and the results it recorded are replayed on
+-- the slides: livepoll.js feeds them through the same messages a live session
+-- uses, so the bars, charts, counts and clouds all show what the room answered.
+--
+-- A deck rendered without the file comes out exactly as before, and a file
+-- that cannot be read is a warning and no replay, never a failed render.
+-- `livepoll: session: false` turns replay off; `session: other.json` reads
+-- another file.
+
+local function read_file(path)
+  local handle = io.open(path, "rb")
+  if not handle then return nil end
+  local contents = handle:read("a")
+  handle:close()
+  return contents
+end
+
+-- Votes for one recorded poll, keyed by the deck's option values. session.js
+-- writes options in button order, which is the deck's order, so position is
+-- the match; labels are the fallback for a poll whose options have changed
+-- since the class.
+local function recorded_votes(id, poll, rec)
+  local votes, total = {}, 0
+  local rec_options = rec.options or {}
+  if #rec_options == #poll.options then
+    for i, opt in ipairs(poll.options) do
+      local n = tonumber(rec_options[i].votes) or 0
+      votes[opt.value] = n
+      total = total + n
+    end
+  else
+    for _, r in ipairs(rec_options) do
+      local found = false
+      for _, opt in ipairs(poll.options) do
+        if r.label == opt.label or r.label == opt.text or r.label == option_label(poll, opt) then
+          local n = tonumber(r.votes) or 0
+          votes[opt.value] = n
+          total = total + n
+          found = true
+        end
+      end
+      if not found then
+        quarto.log.warning(
+          "livepoll: session.json has an answer '" .. tostring(r.label) .. "' for poll '" .. id
+            .. "' that the deck no longer offers; it is left out"
+        )
+      end
+    end
+    -- options added since the class start at zero
+    for _, opt in ipairs(poll.options) do
+      if votes[opt.value] == nil then votes[opt.value] = 0 end
+    end
+  end
+  return votes, total
+end
+
+local function read_session(meta)
+  local setting = meta.livepoll and meta.livepoll.session
+  local name = "session.json"
+  if setting ~= nil then
+    local v = meta_value(setting)
+    if v == false or truthy(v) == false then return nil end
+    if type(v) == "string" and v ~= "" and v ~= "true" then name = v end
+  end
+
+  local dir = quarto.doc.input_file and pandoc.path.directory(quarto.doc.input_file) or "."
+  local path = pandoc.path.join({ dir, name })
+  local raw = read_file(path)
+  if not raw then return nil end
+
+  local ok, session = pcall(quarto.json.decode, raw)
+  if not ok or type(session) ~= "table" then
+    quarto.log.warning("livepoll: " .. name .. " is not readable JSON; no results replayed")
+    return nil
+  end
+  if session.version ~= 1 then
+    quarto.log.warning(
+      "livepoll: " .. name .. " is version " .. tostring(session.version)
+        .. "; only version 1 is understood, so no results replayed"
+    )
+    return nil
+  end
+
+  local recorded = { polls = {}, clouds = {} }
+  local any = false
+
+  for _, rec in ipairs(session.polls or {}) do
+    local poll = rec.id and polls[rec.id]
+    if not poll then
+      quarto.log.warning("livepoll: " .. name .. " has poll '" .. tostring(rec.id) .. "', which is not in this deck")
+    else
+      local votes, total = recorded_votes(rec.id, poll, rec)
+      if total > 0 then
+        recorded.polls[rec.id] = { votes = votes, voters = tonumber(rec.voters) or total }
+        any = true
+      end
+    end
+  end
+
+  for _, rec in ipairs(session.clouds or {}) do
+    if not (rec.id and clouds[rec.id]) then
+      quarto.log.warning("livepoll: " .. name .. " has word cloud '" .. tostring(rec.id) .. "', which is not in this deck")
+    else
+      local counts, n = {}, 0
+      for _, w in ipairs(rec.words or {}) do
+        if w.word and (tonumber(w.count) or 0) > 0 then
+          counts[w.word] = tonumber(w.count)
+          n = n + 1
+        end
+      end
+      if n > 0 then
+        recorded.clouds[rec.id] = counts
+        any = true
+      end
+    end
+  end
+
+  if not any then return nil end
+  -- an empty Lua table would encode as [] rather than {}
+  if next(recorded.polls) == nil then recorded.polls = nil end
+  if next(recorded.clouds) == nil then recorded.clouds = nil end
+  return recorded
+end
+
 ------------------------------------------------------------------ the emit
 
 local function emit(doc)
@@ -846,6 +973,7 @@ local function emit(doc)
     polls = published_polls,
     cloudOrder = cloud_order,
     clouds = published_clouds,
+    recorded = read_session(meta),
   }
 
   -- `</` is escaped so the JSON can never close the <script> element early.
@@ -861,7 +989,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "1.4.0",
+    version = "1.5.0",
     scripts = { "qrcode.js", "livepoll.js" },
     stylesheets = { "livepoll.css" },
   })

@@ -26,6 +26,8 @@ deck's front matter is all the configuration there is.
 - **Password-protected hosting**: only someone with the password behind the
   room's bcrypt hash can host; everyone else follows along.
 - **A participant page, `poll.html`**, that configures itself from the deck.
+- **Session recording**: Alt+R saves the class's answers to `session.json`;
+  re-render with it beside the deck and the results are back on the slides.
 
 ## Quick start
 
@@ -172,6 +174,7 @@ Which of these is a systematic error?
 | --- | --- |
 | Shift+L | open or close the Live poll tab in the menu |
 | Shift+Q | full-screen QR code for the poll page (click or Esc closes it) |
+| Alt+R | save the session: downloads `session.json` (see below) |
 | space | step to the answer (or the results, when they are hidden) |
 
 Opening a poll's slide makes it the live poll, so there is normally nothing to
@@ -186,6 +189,45 @@ Other options under `livepoll:`:
 | `auto-activate` | `true` | activate a poll when its slide opens |
 | `menu` | `true` | `false` keeps the controls in a floating panel (with a 📡 button) instead of the menu |
 | `position` | `top-right` | where that button sits: `top-left`, `bottom-right`, `bottom-left`, `hidden` |
+| `session` | `session.json` | the recording to replay; `false` turns replay off |
+
+## Recording a session
+
+The vote tallies live only in the presenter's browser while the class runs.
+To keep them, press **Alt+R** in the presenting window before you close it:
+a `session.json` downloads with every poll's counts, every word cloud's words
+and, if the deck uses the
+[Excalidraw](https://github.com/parmsam/quarto-excalidraw) overlay, the
+drawings made over each slide.
+
+Put that file next to the deck's `.qmd` and render again. The deck then opens
+showing what the room answered: bars and charts filled in, response counts
+set, word clouds drawn. No server is needed to view it.
+
+- Polls nobody voted in and empty clouds are left out of the file.
+- Results are matched to polls by `#id`, so keep the ids when editing a deck
+  after class. An id that has gone from the deck is a render warning.
+- Present the re-rendered deck and press Alt+R again, and the replayed results
+  are carried into the new file. Hosting live starts a poll afresh: its first
+  new vote replaces the replayed numbers.
+- `window.plateSession.build()` in the browser console returns what Alt+R
+  would save, without downloading it.
+
+The file is plain JSON (`version: 1`), so you can also write or correct one
+by hand:
+
+```json
+{
+  "version": 1,
+  "polls": [
+    { "id": "capital", "voters": 22,
+      "options": [ { "label": "Sydney", "votes": 7 }, { "label": "Canberra", "correct": true, "votes": 15 } ] }
+  ],
+  "clouds": [
+    { "id": "today", "words": [ { "word": "fun", "count": 4 } ] }
+  ]
+}
+```
 
 ## Password
 
@@ -217,7 +259,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-1.4.0/`), with no cache-busting. If you change the
+version (`livepoll-1.5.0/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.
