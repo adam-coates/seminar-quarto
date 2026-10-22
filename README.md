@@ -163,8 +163,9 @@ How confident are you running a t-test in R?
 In the embedded layout a worded scale is drawn as one diverging bar per
 statement (disagree left of the line, agree right) and a numeric scale as a
 histogram per statement with its mean and median. In the classic layout the
-question slide lists the statements and the scale, and a
-`.poll-results for="feedback"` slide shows a stacked bar chart.
+question slide has a row of buttons per statement and a Submit button, like a
+classic poll's buttons, and a `.poll-results for="feedback"` slide shows a
+stacked bar chart.
 
 ## Layouts
 
@@ -322,7 +323,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-1.6.0/`), with no cache-busting. If you change the
+version (`livepoll-1.7.0/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.

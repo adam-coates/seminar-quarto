@@ -798,32 +798,35 @@ end
 
 ------------------------------------------------------------ likert markup
 
--- The scale under the statements, for the classic slide: "Scale: a · b · c",
--- or for a numeric scale with named ends "Scale: 0 (never) to 10 (always)".
-local function likert_scale_text(likert)
-  local labels = likert.labels
-  if likert.anchors then
-    return string.format("%s (%s) to %s (%s)", labels[1], likert.anchors[1],
-      labels[#labels], likert.anchors[2])
-  end
-  return table.concat(labels, " · ")
-end
-
--- classic: the question slide shows what is being rated; phones do the rating
+-- classic: the question slide is the voting slide, as for a poll. Each
+-- statement gets a row of buttons, one per point, and a Submit button sends the
+-- lot (livepoll.js, initClassicLikerts). Deliberately not inside a `.poll`:
+-- poll.js claims every `.poll` element's buttons as poll votes.
 local function likert_html(id)
   local likert = likerts[id]
   local eid = html_escape(id)
   local out = {}
   if likert.show_question then out[#out + 1] = question_html(id, likert.question) end
-  out[#out + 1] = '<div class="likert lp-likert-classic" data-likert="' .. eid .. '">'
-  if not likert.single then
-    out[#out + 1] = '<ul class="likert-statements">'
-    for _, s in ipairs(likert.statements) do
-      out[#out + 1] = "<li>" .. html_escape(s) .. "</li>"
+  out[#out + 1] = '<div class="likert lp-likert-classic' .. (likert.numeric and " likert-numeric" or "")
+    .. '" data-likert="' .. eid .. '" style="--lp-points:' .. #likert.labels .. '">'
+  for s, statement in ipairs(likert.statements) do
+    out[#out + 1] = '<div class="likert-statement">'
+    if not likert.single then
+      out[#out + 1] = '<div class="likert-statement-text">' .. html_escape(statement) .. "</div>"
     end
-    out[#out + 1] = "</ul>"
+    out[#out + 1] = '<div class="likert-choices">'
+    for p, label in ipairs(likert.labels) do
+      out[#out + 1] = '<button type="button" class="likert-choice" data-s="' .. (s - 1)
+        .. '" data-p="' .. (p - 1) .. '">' .. html_escape(label) .. "</button>"
+    end
+    out[#out + 1] = "</div>"
+    if likert.anchors then
+      out[#out + 1] = '<div class="likert-anchors"><span>' .. html_escape(likert.anchors[1])
+        .. "</span><span>" .. html_escape(likert.anchors[2]) .. "</span></div>"
+    end
+    out[#out + 1] = "</div>"
   end
-  out[#out + 1] = '<p class="likert-scale-note">Scale: ' .. html_escape(likert_scale_text(likert)) .. "</p>"
+  out[#out + 1] = '<button type="button" class="likert-submit" disabled>Submit</button>'
   out[#out + 1] = "</div>"
   out[#out + 1] = '<p class="poll-voters">Responses: <span class="likert-voters" data-likert="'
     .. eid .. '">0</span></p>'
@@ -1409,7 +1412,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "1.6.0",
+    version = "1.7.0",
     scripts = { "qrcode.js", "livepoll.js" },
     stylesheets = { "livepoll.css" },
   })
