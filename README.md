@@ -43,16 +43,33 @@ address, `poll.html`.
 The demo's `hash` is a placeholder, so hosting is refused until you put in your
 own (see [Password](#password)).
 
-## Using it in your own project
+## Installing
 
-Copy `_extensions/livepoll/` into your project, then:
+In your project folder:
+
+```bash
+quarto add adam-coates/seminar-quarto
+```
+
+This installs the extension into `_extensions/adam-coates/livepoll/`.
+`quarto update adam-coates/seminar-quarto` updates it later;
+`quarto add adam-coates/seminar-quarto@<tag or branch>` installs a
+particular version.
+
+The audience's page, `poll.html`, has to sit beside each rendered deck. Let
+the extension's post-render script put it there:
 
 ```yaml
-# _quarto.yml: put poll.html beside every rendered deck
+# _quarto.yml
 project:
   post-render:
-    - _extensions/livepoll/copy-poll-page.lua
+    - _extensions/adam-coates/livepoll/copy-poll-page.lua
 ```
+
+(Without a project, copy `_extensions/adam-coates/livepoll/poll.html` next to
+the rendered deck yourself.)
+
+Then enable it in the deck:
 
 ```yaml
 # the deck's front matter

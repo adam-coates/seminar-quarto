@@ -6,7 +6,7 @@
 --
 --     project:
 --       post-render:
---         - _extensions/livepoll/copy-poll-page.lua
+--         - _extensions/adam-coates/livepoll/copy-poll-page.lua
 --
 -- Copying on every render means the deployed page can never drift from the
 -- extension's. Quarto lists what it just rendered in QUARTO_PROJECT_OUTPUT_FILES
