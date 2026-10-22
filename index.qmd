@@ -116,7 +116,7 @@ Buttons here, the chart on the next slide.
 
 ## Classic rating results
 
-::: {.poll-results for="classic-likert" show-question="true"}
+::: {.poll-results for="classic-likert" show-question="true" orientation="vertical" legend="right" color="#444"}
 :::
 
 ## A classic word cloud
