@@ -921,6 +921,57 @@
     });
   }
 
+  // The classic voting slide: one choice per statement, then Submit sends them
+  // to the host the way a classic poll button sends its vote (poll.js, vote()).
+  function initClassicLikerts() {
+    var boxes = document.querySelectorAll(".lp-likert-classic[data-likert]");
+    Array.prototype.forEach.call(boxes, function (box) {
+      var id = box.getAttribute("data-likert");
+      var def = likertDef(id);
+      if (!def) return;
+      var answers = def.statements.map(function () {
+        return null;
+      });
+      var submit = box.querySelector(".likert-submit");
+
+      box.querySelectorAll(".likert-choice").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var s = Number(button.getAttribute("data-s"));
+          answers[s] = Number(button.getAttribute("data-p"));
+          button.parentElement.querySelectorAll(".likert-choice").forEach(function (b) {
+            b.classList.toggle("selected", b === button);
+          });
+          submit.disabled = answers.some(function (a) {
+            return a === null;
+          });
+          button.blur();
+        });
+      });
+
+      submit.addEventListener("click", function () {
+        if (!window.RevealSeminar || !RevealSeminar.connected()) {
+          alert("You are currently not connected to the live poll. Your answer is ignored.");
+          return;
+        }
+        var message = new CustomEvent("send");
+        message.content = {
+          sender: "likert-plugin",
+          recipient: true,
+          type: "answer",
+          likert: id,
+          answers: answers.slice(),
+        };
+        document.dispatchEvent(message);
+        box.querySelectorAll("button").forEach(function (b) {
+          b.disabled = true;
+        });
+        submit.classList.add("sent");
+        submit.textContent = "Sent";
+        submit.blur();
+      });
+    });
+  }
+
   function renderLikert(id) {
     var def = likertDef(id);
     if (!def) return;
@@ -1679,6 +1730,7 @@
     moveIntoMenu();
     renderQRCodes();
     renderPanelQRCodes();
+    initClassicLikerts();
     syncAllPanels(); // results="hidden" panels start hidden
     updatePills();
     initRevealHooks();

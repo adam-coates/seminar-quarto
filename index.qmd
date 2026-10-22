@@ -109,6 +109,11 @@ Buttons here, the chart on the next slide.
 - I would use live polls in my own teaching
 :::
 
+## How useful was today, from 1 to 5?
+
+::: {.likert #classic-useful layout="classic" scale="1-5" low="Not useful" high="Very useful"}
+:::
+
 ## Classic rating results
 
 ::: {.poll-results for="classic-likert" show-question="true"}
