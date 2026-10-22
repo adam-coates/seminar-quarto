@@ -1308,8 +1308,42 @@
     }, 100);
   }
 
+  /* ------------------------------------------------- recorded session */
+
+  // Results from a session.json beside the deck (livepoll.lua puts them in the
+  // config as `recorded`), fed in as the messages a live session would have
+  // sent. Everything that draws results listens to those already: poll.js and
+  // the chart plugin, the embedded bars, the word clouds. So does session.js,
+  // which is the point of going this way: present the re-rendered deck, press
+  // Alt+R again, and the recorded results are in the new file instead of being
+  // dropped as never voted on.
+  //
+  // Run after reveal's `ready`, which is when poll.js builds its tallies and the
+  // chart plugin its charts. Hosting live afterwards starts each poll afresh:
+  // the first new vote replaces the replayed numbers with the live tally.
+  function replayRecorded() {
+    var recorded = deckConfig().recorded;
+    if (!recorded) return;
+    function send(content) {
+      var event = new CustomEvent("received");
+      event.content = content;
+      document.dispatchEvent(event);
+    }
+    var pollIds = Object.keys(recorded.polls || {});
+    for (var i = 0; i < pollIds.length; i++) {
+      var poll = recorded.polls[pollIds[i]];
+      send({ sender: "poll-plugin", type: "voters", poll: pollIds[i], voters: poll.voters });
+      send({ sender: "poll-plugin", type: "results", poll: pollIds[i], votes: poll.votes });
+    }
+    var cloudIds = Object.keys(recorded.clouds || {});
+    for (var j = 0; j < cloudIds.length; j++) {
+      send({ sender: "wordcloud-plugin", type: "counts", cloud: cloudIds[j], counts: recorded.clouds[cloudIds[j]] });
+    }
+  }
+
   function initRevealHooks() {
     whenRevealReady(function (Reveal) {
+      setTimeout(replayRecorded, 0); // after every other `ready` listener
       Reveal.on("slidechanged", function () {
         autoActivateForCurrentSlide();
         refreshVisuals();
