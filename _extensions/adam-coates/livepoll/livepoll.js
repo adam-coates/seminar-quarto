@@ -289,11 +289,15 @@
 
   function initPollControls() {
     var pollSelector = document.getElementById("pollSelector");
-    var items = document.querySelectorAll(".poll[data-poll], .wordcloud[data-wordcloud]");
+    var items = document.querySelectorAll(
+      ".poll[data-poll], .wordcloud[data-wordcloud], .likert[data-likert]"
+    );
 
     for (var i = 0; i < items.length; i++) {
       var itemId =
-        items[i].getAttribute("data-poll") || items[i].getAttribute("data-wordcloud");
+        items[i].getAttribute("data-poll") ||
+        items[i].getAttribute("data-wordcloud") ||
+        items[i].getAttribute("data-likert");
       var option = document.createElement("option");
       option.value = itemId;
       option.textContent = itemId;
@@ -715,6 +719,238 @@
     }
   });
 
+  /* ------------------------------------------------------------ likert */
+
+  // A rating scale (livepoll.lua, .likert): statements rated on one scale. Each
+  // phone sends one answer for the whole question, a point index per statement
+  // (null for one left out). Like votes and words, the tally is kept by the
+  // hosting deck, which broadcasts it; every deck draws from the broadcast.
+
+  var likertState = {}; // id -> { counts: [[n per point] per statement], voters }, as drawn
+  // The host's own tally, kept apart from what is drawn: a replayed recording
+  // fills likertState, and live answers start afresh rather than adding to it,
+  // as they do for polls.
+  var likertTally = {}; // id -> { counts, voters }, host only
+  var likertAnswers = {}; // id -> { voterKey: true }, host only
+
+  function likertDef(id) {
+    return (deckConfig().likerts || {})[id];
+  }
+
+  function emptyCounts(def) {
+    return def.statements.map(function () {
+      return def.labels.map(function () {
+        return 0;
+      });
+    });
+  }
+
+  // Same rule as poll.js: count people, not messages. The relay names the
+  // sender; without one (an older relay) every message counts.
+  function voterKey(sender) {
+    if (!sender) return null;
+    if (typeof sender === "string") return sender;
+    return sender.id || sender.name || null;
+  }
+
+  function addLikertAnswer(id, answers, sender) {
+    var def = likertDef(id);
+    if (!def || !Array.isArray(answers)) return false;
+    var state = likertTally[id] || (likertTally[id] = { counts: emptyCounts(def), voters: 0 });
+    var voters = likertAnswers[id] || (likertAnswers[id] = {});
+    var key = voterKey(sender);
+    if (key) {
+      if (voters[key]) return false; // already answered: a reload, not a person
+      voters[key] = true;
+    }
+    var counted = false;
+    for (var s = 0; s < def.statements.length; s++) {
+      var p = answers[s];
+      if (typeof p === "number" && p >= 0 && p < def.labels.length && p === Math.floor(p)) {
+        state.counts[s][p]++;
+        counted = true;
+      }
+    }
+    if (!counted) {
+      if (key) delete voters[key];
+      return false;
+    }
+    state.voters++;
+    return true;
+  }
+
+  function broadcastLikert(id) {
+    var message = new CustomEvent("broadcast");
+    message.content = {
+      sender: "likert-plugin",
+      copy: true,
+      type: "counts",
+      likert: id,
+      counts: likertTally[id].counts,
+      voters: likertTally[id].voters,
+    };
+    document.dispatchEvent(message);
+  }
+
+  document.addEventListener("received", function (event) {
+    var content = event.content;
+    if (!content || content.sender !== "likert-plugin") return;
+
+    if (content.type === "answer") {
+      // only the host keeps the tally
+      if (!window.RevealSeminar || !RevealSeminar.hosting()) return;
+      if (addLikertAnswer(content.likert, content.answers, event.sender)) {
+        var tally = likertTally[content.likert];
+        likertState[content.likert] = { counts: tally.counts, voters: tally.voters };
+        renderLikert(content.likert);
+        broadcastLikert(content.likert);
+      }
+    } else if (content.type === "counts") {
+      var def = likertDef(content.likert);
+      if (!def || !Array.isArray(content.counts)) return;
+      likertState[content.likert] = { counts: content.counts, voters: content.voters || 0 };
+      renderLikert(content.likert);
+    }
+  });
+
+  var pctText = function (x) {
+    return Math.round(x * 100) + "%";
+  };
+  var responsesText = function (n) {
+    return n + (n === 1 ? " response" : " responses");
+  };
+
+  // Where each point's segment starts and how wide it is, as shares of the
+  // statement's answers, laid out so the neutral point straddles zero.
+  function diverging(counts) {
+    var n = counts.length;
+    var total = counts.reduce(function (a, b) { return a + b; }, 0);
+    var share = counts.map(function (c) { return total > 0 ? c / total : 0; });
+    var arm = Math.floor(n / 2);
+    var neutral = n % 2 === 1 ? share[arm] : 0;
+    var neg = share.slice(0, arm).reduce(function (a, b) { return a + b; }, 0);
+    var pos = share.slice(n - arm).reduce(function (a, b) { return a + b; }, 0);
+    var at = -(neg + neutral / 2);
+    var start = share.map(function (x) {
+      var here = at;
+      at += x;
+      return here;
+    });
+    return { start: start, width: share, neg: neg, pos: pos, total: total };
+  }
+
+  // How far the bars reach either side of zero, rounded up to a tenth, so all
+  // statements share one axis.
+  function extent(rows) {
+    var left = 0, right = 0;
+    rows.forEach(function (r) {
+      var last = r.start.length - 1;
+      left = Math.max(left, -(r.start[0] || 0));
+      right = Math.max(right, (r.start[last] || 0) + (r.width[last] || 0));
+    });
+    var round = function (x) {
+      return Math.min(1, Math.max(0.2, Math.ceil(x * 10 - 1e-9) / 10));
+    };
+    return { left: round(left), right: round(right) };
+  }
+
+  function summary(counts, values) {
+    var total = counts.reduce(function (a, b) { return a + b; }, 0);
+    if (total === 0) return null;
+    var sum = 0;
+    counts.forEach(function (c, i) { sum += c * values[i]; });
+    var nth = function (k) {
+      var seen = 0;
+      for (var i = 0; i < counts.length; i++) {
+        seen += counts[i];
+        if (seen > k) return values[i];
+      }
+      return values[values.length - 1];
+    };
+    var median = (nth(Math.floor((total - 1) / 2)) + nth(Math.ceil((total - 1) / 2))) / 2;
+    return { mean: sum / total, median: median, total: total };
+  }
+
+  function drawDiverging(box, counts) {
+    var bars = counts.map(diverging);
+    var ext = extent(bars);
+    var span = ext.left + ext.right;
+    var at = function (x) { return ((x + ext.left) / span) * 100; };
+    var rows = box.querySelectorAll(".lp-lk-row");
+    bars.forEach(function (b, s) {
+      var row = rows[s];
+      if (!row) return;
+      row.querySelector(".lp-lk-axis").style.left = at(0).toFixed(3) + "%";
+      var segs = row.querySelectorAll(".lp-lk-seg");
+      for (var p = 0; p < segs.length; p++) {
+        var w = b.width[p] || 0;
+        segs[p].style.left = at(b.start[p] || 0).toFixed(3) + "%";
+        segs[p].style.width = ((w / span) * 100).toFixed(3) + "%";
+        segs[p].classList.toggle("lp-lk-zero", w === 0);
+        segs[p].querySelector(".lp-lk-pct").textContent = w > 0 ? pctText(w) : "";
+      }
+      row.querySelector(".lp-lk-neg").textContent = b.total > 0 ? pctText(b.neg) : "";
+      row.querySelector(".lp-lk-pos").textContent = b.total > 0 ? pctText(b.pos) : "";
+      row.querySelector(".lp-lk-n").textContent = responsesText(b.total);
+    });
+  }
+
+  function drawHistograms(box, counts, def) {
+    var values = def.labels.map(Number);
+    var n = def.labels.length;
+    var max = 0;
+    counts.forEach(function (c) { c.forEach(function (x) { if (x > max) max = x; }); });
+    var rows = box.querySelectorAll(".lp-lk-row");
+    counts.forEach(function (c, s) {
+      var row = rows[s];
+      if (!row) return;
+      var bars = row.querySelectorAll(".lp-hist-bar");
+      for (var p = 0; p < bars.length; p++) {
+        var count = c[p] || 0;
+        bars[p].style.height = max > 0 ? ((count / max) * 100).toFixed(2) + "%" : "0%";
+        bars[p].querySelector(".lp-hist-n").textContent = count > 0 ? String(count) : "";
+      }
+      var sum = summary(c, values);
+      row.querySelector(".lp-lk-n").textContent = responsesText(sum ? sum.total : 0);
+      row.querySelector(".lp-lk-stats").textContent = sum
+        ? "mean " + sum.mean.toFixed(1) + " · median " + sum.median
+        : "";
+      var mean = row.querySelector(".lp-hist-mean");
+      mean.hidden = !sum;
+      if (sum) mean.style.left = (((sum.mean - values[0] + 0.5) / n) * 100).toFixed(3) + "%";
+    });
+  }
+
+  function renderLikert(id) {
+    var def = likertDef(id);
+    if (!def) return;
+    var state = likertState[id] || { counts: emptyCounts(def), voters: 0 };
+
+    var voters = document.querySelectorAll('.likert-voters[data-likert="' + id + '"]');
+    for (var i = 0; i < voters.length; i++) voters[i].textContent = state.voters;
+
+    // embedded
+    var boxes = document.querySelectorAll('.lp-likert[data-likert="' + id + '"]');
+    for (var j = 0; j < boxes.length; j++) {
+      if (def.numeric) drawHistograms(boxes[j], state.counts, def);
+      else drawDiverging(boxes[j], state.counts);
+    }
+
+    // classic results: dataset p is point p across the statements
+    if (window.RevealChart) {
+      var charts = document.querySelectorAll('canvas[data-chart][data-likert="' + id + '"]');
+      for (var k = 0; k < charts.length; k++) {
+        if (!charts[k].chart) continue; // not built yet; repainted on arrival
+        for (var p = 0; p < def.labels.length; p++) {
+          charts[k].chart.data.datasets[p].data = state.counts.map(function (row) {
+            return row[p] || 0;
+          });
+        }
+        charts[k].chart.update();
+      }
+    }
+  }
+
   /* ------------------------------------------------------ panel layout */
 
   // A panel (livepoll.lua, layout="panel") is one slide holding the options as
@@ -767,7 +1003,7 @@
   // as given on the same terms as the green bar in the classic chart: reveal's
   // own `visible` class *and* the presenter having actually stepped to it.
   function syncPanel(panel) {
-    var pollId = panel.getAttribute("data-poll");
+    var pollId = panel.getAttribute("data-poll") || panel.getAttribute("data-likert");
     var answer = panel.querySelector(".poll-answer");
     var given =
       !!answer &&
@@ -789,7 +1025,9 @@
   }
 
   function syncAllPanels() {
-    var panels = document.querySelectorAll(".livepoll-question[data-poll]");
+    var panels = document.querySelectorAll(
+      ".livepoll-question[data-poll], .livepoll-question[data-likert]"
+    );
     for (var i = 0; i < panels.length; i++) syncPanel(panels[i]);
   }
 
@@ -811,7 +1049,7 @@
 
   // Shrink the rows until they fit, for polls with many or long options.
   function fitPanelBars(panel) {
-    var bars = panel.querySelector(".lp-bars");
+    var bars = panel.querySelector(".lp-bars, .lp-likert");
     var main = panel.querySelector(".lp-main");
     if (!bars || !main) return;
     var question = main.querySelector(".poll-question");
@@ -880,7 +1118,10 @@
     var online = !!(window.RevealSeminar && RevealSeminar.connected && RevealSeminar.connected());
     var panels = document.querySelectorAll(".livepoll-question");
     for (var i = 0; i < panels.length; i++) {
-      var id = panels[i].getAttribute("data-poll") || panels[i].getAttribute("data-wordcloud");
+      var id =
+        panels[i].getAttribute("data-poll") ||
+        panels[i].getAttribute("data-wordcloud") ||
+        panels[i].getAttribute("data-likert");
       var state = !online ? "offline" : id === currentActivePoll ? "live" : "closed";
       var pill = panels[i].querySelector(".lp-pill");
       if (pill) {
@@ -968,10 +1209,15 @@
   function pollOnSlide(slide) {
     if (!slide || !slide.querySelector) return null;
     var el = slide.querySelector(
-      ".poll[data-poll], canvas[data-chart][data-poll], .wordcloud[data-wordcloud]"
+      ".poll[data-poll], canvas[data-chart][data-poll], .wordcloud[data-wordcloud], " +
+        ".likert[data-likert], canvas[data-chart][data-likert]"
     );
     if (!el) return null;
-    return el.getAttribute("data-poll") || el.getAttribute("data-wordcloud");
+    return (
+      el.getAttribute("data-poll") ||
+      el.getAttribute("data-wordcloud") ||
+      el.getAttribute("data-likert")
+    );
   }
 
   // Charts and clouds measure their container, which is meaningless while the
@@ -1048,6 +1294,11 @@
     for (var j = 0; j < clouds.length; j++) {
       paintCloud(clouds[j].getAttribute("data-wordcloud"));
     }
+
+    var scales = slide.querySelectorAll("[data-likert]");
+    for (var l = 0; l < scales.length; l++) {
+      renderLikert(scales[l].getAttribute("data-likert"));
+    }
   }
 
   // Opening a poll or results slide makes that poll the live one. Leaving it
@@ -1074,6 +1325,19 @@
         pollId: currentActivePoll,
       };
       document.dispatchEvent(message);
+
+      if (likertState[currentActivePoll]) {
+        var tally = new CustomEvent("send");
+        tally.content = {
+          sender: "likert-plugin",
+          recipient: user,
+          type: "counts",
+          likert: currentActivePoll,
+          counts: likertState[currentActivePoll].counts,
+          voters: likertState[currentActivePoll].voters,
+        };
+        document.dispatchEvent(tally);
+      }
 
       if (cloudCounts[currentActivePoll]) {
         var counts = new CustomEvent("send");
@@ -1334,6 +1598,11 @@
       var poll = recorded.polls[pollIds[i]];
       send({ sender: "poll-plugin", type: "voters", poll: pollIds[i], voters: poll.voters });
       send({ sender: "poll-plugin", type: "results", poll: pollIds[i], votes: poll.votes });
+    }
+    var likertIds = Object.keys(recorded.likerts || {});
+    for (var k = 0; k < likertIds.length; k++) {
+      var likert = recorded.likerts[likertIds[k]];
+      send({ sender: "likert-plugin", type: "counts", likert: likertIds[k], counts: likert.counts, voters: likert.voters });
     }
     var cloudIds = Object.keys(recorded.clouds || {});
     for (var j = 0; j < cloudIds.length; j++) {
