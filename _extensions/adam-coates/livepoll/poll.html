@@ -12,6 +12,15 @@
         box-sizing: border-box;
       }
 
+      :root {
+        --accent: #667eea;
+        --accent-soft: #eef0fb;
+        --ink: #333;
+        --muted: #777;
+        --good: #2e9e4f;
+        --bad: #c0392b;
+      }
+
       body {
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
@@ -19,15 +28,16 @@
         background: linear-gradient(135deg, white 0%, grey 100%);
         min-height: 100vh;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
-        padding: 20px;
+        padding: 20px 14px 120px;
+        color: var(--ink);
       }
 
       .container {
         background: white;
         border-radius: 20px;
-        padding: 40px;
+        padding: 28px 24px;
         max-width: 500px;
         width: 100%;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -35,13 +45,29 @@
 
       h1 {
         color: #333;
-        margin-bottom: 10px;
-        font-size: 28px;
+        margin-bottom: 4px;
+        font-size: 26px;
+      }
+
+      .me {
+        color: var(--muted);
+        font-size: 14px;
+        min-height: 1em;
+      }
+
+      .me button {
+        padding: 0 0 0 4px;
+        border: none;
+        background: none;
+        color: var(--accent);
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: underline;
       }
 
       #status {
         padding: 12px;
-        margin: 20px 0;
+        margin: 16px 0;
         border-radius: 10px;
         font-size: 14px;
         text-align: center;
@@ -68,6 +94,62 @@
         color: #004085;
       }
 
+      /* ---- tabs ---- */
+
+      .tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 18px;
+        padding: 4px;
+        border-radius: 12px;
+        background: #f1f1f4;
+      }
+
+      .tabs[hidden] {
+        display: none;
+      }
+
+      .tabs button {
+        flex: 1;
+        padding: 10px 8px;
+        border: none;
+        border-radius: 9px;
+        background: none;
+        color: var(--muted);
+        font-size: 15px;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .tabs button:hover:not(:disabled) {
+        background: none;
+        color: var(--ink);
+        transform: none;
+        box-shadow: none;
+      }
+
+      .tabs button[aria-selected="true"] {
+        background: white;
+        color: var(--ink);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+      }
+
+      .tabs .badge {
+        display: inline-block;
+        min-width: 1.4em;
+        margin-left: 4px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: white;
+        font-size: 12px;
+        line-height: 1.4em;
+      }
+
+      .tabs .badge:empty {
+        display: none;
+      }
+
       .poll-content {
         min-height: 200px;
       }
@@ -75,8 +157,24 @@
       .poll-question {
         font-size: 20px;
         color: #555;
-        margin-bottom: 30px;
+        margin-bottom: 24px;
         line-height: 1.5;
+      }
+
+      .hint {
+        margin: -14px 0 18px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .round-banner {
+        margin-bottom: 16px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: var(--accent-soft);
+        color: #3b4a9c;
+        font-size: 15px;
+        line-height: 1.45;
       }
 
       .poll-options {
@@ -88,17 +186,18 @@
       button {
         padding: 18px 30px;
         font-size: 18px;
-        border: 2px solid #667eea;
+        border: 2px solid var(--accent);
         background: white;
-        color: #667eea;
+        color: var(--accent);
         border-radius: 12px;
         cursor: pointer;
         transition: all 0.3s ease;
         font-weight: 600;
+        font-family: inherit;
       }
 
       button:hover:not(:disabled) {
-        background: #667eea;
+        background: var(--accent);
         color: white;
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
@@ -110,21 +209,27 @@
       }
 
       button.selected {
-        background: #667eea;
+        background: var(--accent);
         color: white;
-        border-color: #667eea;
+        border-color: var(--accent);
+      }
+
+      .submit {
+        width: 100%;
+        margin-top: 18px;
       }
 
       .footer {
-        margin-top: 30px;
+        margin-top: 26px;
         text-align: center;
         color: #999;
-        font-size: 14px;
+        font-size: 13px;
+        line-height: 1.5;
       }
 
       .waiting-message {
         text-align: center;
-        padding: 40px 20px;
+        padding: 30px 10px;
         color: #666;
       }
 
@@ -158,17 +263,79 @@
         border-radius: 3px;
       }
 
+      .note {
+        margin-top: 18px;
+        color: #666;
+        text-align: center;
+        line-height: 1.5;
+      }
+
+      .closed-box {
+        margin-top: 18px;
+        padding: 12px;
+        border-radius: 10px;
+        background: #f1f1f4;
+        color: #555;
+        text-align: center;
+        font-weight: 600;
+      }
+
+      /* ---- timer ---- */
+
+      .timer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: -6px 0 18px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        color: #555;
+      }
+
+      .timer[hidden] {
+        display: none;
+      }
+
+      .timer-track {
+        flex: 1;
+        height: 8px;
+        border-radius: 999px;
+        background: #ececf2;
+        overflow: hidden;
+      }
+
+      .timer-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--accent);
+        transition: width 0.25s linear;
+      }
+
+      .timer.low .timer-fill {
+        background: var(--bad);
+      }
+
+      .timer.low {
+        color: var(--bad);
+      }
+
+      /* ---- word cloud ---- */
+
       .word-form {
         display: flex;
         gap: 10px;
       }
 
-      .word-form input {
+      .word-form input,
+      .number-row input,
+      .ask-form textarea,
+      .nick-form input {
         flex: 1 1 auto;
         min-width: 0;
         padding: 16px;
         font-size: 18px;
-        border: 2px solid #667eea;
+        font-family: inherit;
+        border: 2px solid var(--accent);
         border-radius: 12px;
       }
 
@@ -192,17 +359,19 @@
         display: inline-block;
         padding: 4px 12px;
         border-radius: 999px;
-        background: #eef0fb;
+        background: var(--accent-soft);
         color: #3b4a9c;
         font-weight: 600;
       }
+
+      /* ---- answers ---- */
 
       .answer-box {
         margin-top: 24px;
         padding: 16px;
         border-radius: 12px;
         background: #eef7f0;
-        border: 2px solid #2e9e4f;
+        border: 2px solid var(--good);
         color: #1c5c30;
         text-align: center;
         font-size: 17px;
@@ -219,18 +388,28 @@
       }
 
       button.is-correct {
-        border-color: #2e9e4f;
-        color: #2e9e4f;
+        border-color: var(--good);
+        color: var(--good);
         opacity: 1;
       }
 
       button.is-wrong {
-        border-color: #c0392b;
-        color: #c0392b;
+        border-color: var(--bad);
+        color: var(--bad);
         opacity: 1;
       }
 
-      /* likert: one row of points per statement */
+      button.selected.is-correct {
+        background: var(--good);
+        color: white;
+      }
+
+      button.selected.is-wrong {
+        background: var(--bad);
+        color: white;
+      }
+
+      /* ---- likert ---- */
       .likert-statement {
         margin-bottom: 22px;
       }
@@ -274,30 +453,355 @@
         font-size: 13px;
       }
 
-      .likert-submit {
+      /* ---- estimate ---- */
+
+      .number-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .number-row .unit {
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .slider {
         width: 100%;
-        margin-top: 6px;
+        margin-top: 18px;
+        accent-color: var(--accent);
+      }
+
+      .slider-ends {
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      /* ---- rank ---- */
+
+      .rank-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .rank-list button {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        text-align: left;
+        font-size: 17px;
+      }
+
+      .rank-list .place {
+        flex: 0 0 auto;
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 2px dashed currentColor;
+        font-size: 15px;
+      }
+
+      .rank-list button.selected .place {
+        border-style: solid;
+        background: white;
+        color: var(--accent);
+      }
+
+      .link-button {
+        margin-top: 12px;
+        padding: 4px;
+        border: none;
+        background: none;
+        color: var(--accent);
+        font-size: 15px;
+        text-decoration: underline;
+      }
+
+      .link-button:hover:not(:disabled) {
+        background: none;
+        color: var(--accent);
+        transform: none;
+        box-shadow: none;
+      }
+
+      /* ---- hotspot ---- */
+
+      .hotspot-frame {
+        position: relative;
+        border-radius: 10px;
+        overflow: hidden;
+        touch-action: manipulation;
+        cursor: crosshair;
+        box-shadow: 0 0 0 1px #ddd;
+      }
+
+      .hotspot-frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      .hotspot-frame svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .hotspot-frame .pin {
+        fill: var(--accent);
+        stroke: white;
+        stroke-width: 3;
+      }
+
+      .hotspot-frame .target {
+        fill: rgba(46, 158, 79, 0.18);
+        stroke: var(--good);
+        stroke-width: 3;
+      }
+
+      /* ---- questions (Q&A) ---- */
+
+      .ask-form textarea {
+        width: 100%;
+        min-height: 90px;
+        resize: vertical;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+
+      .ask-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .ask-meta button {
+        padding: 10px 22px;
+        font-size: 16px;
+      }
+
+      .qa-list {
+        list-style: none;
+        margin-top: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .qa-item {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 12px;
+        border-radius: 12px;
+        background: #f7f7fa;
+      }
+
+      .qa-item.answered {
+        opacity: 0.55;
+      }
+
+      .qa-item .vote {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 48px;
+        padding: 6px 8px;
+        font-size: 15px;
+        line-height: 1.1;
+      }
+
+      .qa-item .text {
+        flex: 1;
+        min-width: 0;
+        padding-top: 4px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .qa-item .tag {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 0 7px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: #3b4a9c;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      /* ---- quiz ---- */
+
+      .nick-form {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .nick-form button {
+        flex: 0 0 auto;
+        padding: 14px 20px;
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        top: 18px;
+        z-index: 10;
+        max-width: 92vw;
+        padding: 12px 18px;
+        border-radius: 12px;
+        background: #222;
+        color: white;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        transform: translate(-50%, -150%);
+        transition: transform 0.35s ease;
+      }
+
+      .toast.shown {
+        transform: translate(-50%, 0);
+      }
+
+      /* ---- signals and reactions ---- */
+
+      .bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
+        backdrop-filter: blur(6px);
+      }
+
+      .bar[hidden],
+      .bar .group[hidden] {
+        display: none;
+      }
+
+      .bar .group {
+        display: flex;
+        gap: 6px;
+      }
+
+      .bar button {
+        padding: 8px 12px;
+        border-width: 1.5px;
+        border-radius: 999px;
+        font-size: 14px;
+        transform: none;
+      }
+
+      .bar button:hover:not(:disabled) {
+        transform: none;
+        box-shadow: none;
+      }
+
+      .bar .react button {
+        padding: 6px 9px;
+        border-color: transparent;
+        background: #f1f1f4;
+        font-size: 20px;
+        line-height: 1;
+      }
+
+      .bar .react button:hover:not(:disabled) {
+        background: #e4e4ec;
+      }
+
+      .bar .react button.pop {
+        animation: pop 0.35s ease;
+      }
+
+      @keyframes pop {
+        50% {
+          transform: scale(1.35);
+        }
+      }
+
+      .bar .signal button.on {
+        background: #fff1e6;
+        border-color: #d9822b;
+        color: #a35a12;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        button,
+        .timer-fill,
+        .toast {
+          transition: none;
+        }
+        .bar .react button.pop {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
     <div class="container">
       <h1 id="pollTitle">Live Poll</h1>
+      <div class="me" id="me"></div>
       <div id="status" class="connecting">Reading deck configuration...</div>
 
-      <div class="poll-content" id="pollContent">
-        <div class="waiting-message">
-          <h2>🎯 Waiting for Poll</h2>
-          <p>
-            The presenter will activate a poll question soon. Please stand by...
-          </p>
+      <div class="tabs" id="tabs" role="tablist" hidden>
+        <button type="button" role="tab" id="tabPoll" aria-selected="true">Poll<span class="badge" id="pollBadge"></span></button>
+        <button type="button" role="tab" id="tabAsk" aria-selected="false">
+          Questions<span class="badge" id="askBadge"></span>
+        </button>
+      </div>
+
+      <div id="pollPane">
+        <div class="timer" id="timer" hidden>
+          <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
+          <span id="timerText"></span>
+        </div>
+        <div class="poll-content" id="pollContent">
+          <div class="waiting-message">
+            <h2>🎯 Waiting for Poll</h2>
+            <p>
+              The presenter will activate a poll question soon. Please stand by...
+            </p>
+          </div>
         </div>
       </div>
 
+      <div id="askPane" hidden></div>
+
       <div class="footer">
-        Your response will be recorded anonymously
+        Your responses are recorded anonymously
       </div>
     </div>
+
+    <div class="bar" id="bar" hidden>
+      <div class="group signal" id="signalGroup" hidden>
+        <button type="button" data-signal="lost">😕 Lost me</button>
+        <button type="button" data-signal="slow">🐢 Slow down</button>
+      </div>
+      <div class="group react" id="reactGroup" hidden></div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script>
       /*******************************************************************
@@ -313,23 +817,87 @@
        **   2. the page you followed the link from
        **   3. the last deck this browser used successfully
        **   4. index.html
+       **
+       ** It only believes what the presenter *announces*. The relay lets
+       ** anyone in the room send a message to everyone, but only a host can
+       ** announce, so a classmate cannot switch your poll or fake results.
        *******************************************************************/
 
       const CONFIG_RE =
         /<script type="application\/json" id="livepoll-config">([\s\S]*?)<\/script>/;
       const DECK_KEY = "livepoll_deck";
+      const EMOJI = ["👍", "👏", "😂", "😮", "❤️", "🤔"];
 
       const statusEl = document.getElementById("status");
       const pollContent = document.getElementById("pollContent");
 
       let config = null;
-      let polls = {};
-      let clouds = {};
-      let likerts = {};
+      let cfg = {}; // the deck's whole config block
+      let deckUrl = "index.html";
       let socket;
       let joined = false;
-      let activePollId = null;
-      let voted = false;
+
+      // what the presenter has open: id, its kind, which round, which class
+      let active = null; // { id, kind, round }
+      let session = null;
+      const closed = {};
+      const revealed = {}; // id -> correct, once the presenter gives it
+      let timer = null; // { id, endsAt, duration, running, done }
+
+      /* --------------------------------------------------------- storage */
+
+      // localStorage can be missing or full (private windows); nothing here
+      // may depend on it working.
+      function load(key, fallback) {
+        try {
+          const v = localStorage.getItem(key);
+          return v === null ? fallback : JSON.parse(v);
+        } catch (e) {
+          return fallback;
+        }
+      }
+
+      function save(key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+          /* the page still works, it just forgets */
+        }
+      }
+
+      // One random id per browser, the same one the deck uses (same key): it
+      // is what stops a reload voting twice, and lets you upvote a question
+      // once. It is not your name and nothing here asks for it.
+      function deviceId() {
+        let id = null;
+        try {
+          id = localStorage.getItem("livepoll_device");
+        } catch (e) {
+          /* below */
+        }
+        if (!id) {
+          const bytes = new Uint8Array(16);
+          crypto.getRandomValues(bytes);
+          const abc = "abcdefghijkmnpqrstuvwxyz23456789";
+          id = Array.from(bytes, (b) => abc[b % abc.length]).join("");
+          try {
+            localStorage.setItem("livepoll_device", id);
+          } catch (e) {
+            /* a fresh one each load, then */
+          }
+        }
+        return id;
+      }
+      const device = deviceId();
+
+      function esc(text) {
+        return String(text == null ? "" : text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
 
       function updateStatus(message, type = "connecting") {
         statusEl.textContent = message;
@@ -359,7 +927,11 @@
             /* ignore an unparseable referrer */
           }
         }
-        add(localStorage.getItem(DECK_KEY));
+        try {
+          add(localStorage.getItem(DECK_KEY));
+        } catch (e) {
+          /* no storage */
+        }
         add("index.html");
         return list;
       }
@@ -402,10 +974,15 @@
 
       async function loadConfig() {
         for (const deck of candidateDecks()) {
-          const cfg = await readDeck(deck);
-          if (cfg && cfg.server) {
-            localStorage.setItem(DECK_KEY, deck);
-            return cfg;
+          const found = await readDeck(deck);
+          if (found && found.server) {
+            try {
+              localStorage.setItem(DECK_KEY, deck);
+            } catch (e) {
+              /* fine */
+            }
+            deckUrl = deck;
+            return found;
           }
         }
         return null;
@@ -430,20 +1007,62 @@
 
       /* ------------------------------------------------------ vote locks */
 
-      function hasVoted(pollId) {
-        return localStorage.getItem(`voted_${pollId}`) === "true";
+      // "Already answered" is per class (the presenter's session) and per
+      // round: next week's deck with the same question ids starts afresh, a
+      // reload in this class does not get a second go.
+      function lockKey(id, round) {
+        if (!session) return `voted_${id}`; // a deck from before sessions
+        return `lp:${config.room}:${session}:${id}:r${round || 1}`;
       }
 
-      function markVoted(pollId, choice) {
-        localStorage.setItem(`voted_${pollId}`, "true");
-        localStorage.setItem(`choice_${pollId}`, choice);
+      function hasVoted(id, round) {
+        return load(lockKey(id, round), null) !== null;
       }
 
-      function myChoice(pollId) {
-        return localStorage.getItem(`choice_${pollId}`);
+      function markVoted(id, round, value) {
+        save(lockKey(id, round), value);
+      }
+
+      function myAnswer(id, round) {
+        return load(lockKey(id, round), null);
+      }
+
+      /* ------------------------------------------------------- sending */
+
+      function send(content) {
+        if (!socket || !joined) return false;
+        socket.emit("message", {
+          venue: config.url,
+          name: config.room,
+          hash: config.hash,
+          recipient: true,
+          content: Object.assign({ device }, content),
+        });
+        return true;
+      }
+
+      function requireJoined() {
+        if (!joined) {
+          alert("Not connected yet. Please wait...");
+          return false;
+        }
+        return true;
+      }
+
+      function isOpen() {
+        return active && !closed[active.id];
       }
 
       /* ------------------------------------------------------------- UI */
+
+      function kindOf(id) {
+        const tables = {
+          poll: cfg.polls, wordcloud: cfg.clouds, likert: cfg.likerts,
+          estimate: cfg.estimates, rank: cfg.ranks, hotspot: cfg.hotspots,
+        };
+        for (const kind in tables) if (tables[kind] && tables[kind][id]) return kind;
+        return null;
+      }
 
       function showWaitingMessage() {
         pollContent.innerHTML = `
@@ -453,56 +1072,162 @@
         </div>
       `;
         updateStatus("Connected - Waiting for poll activation", "waiting");
+        drawTimer();
+      }
+
+      function disableInputs() {
+        pollContent.querySelectorAll("button, input, textarea").forEach((el) => (el.disabled = true));
+      }
+
+      function note(text) {
+        const p = document.createElement("p");
+        p.className = "note";
+        p.textContent = text;
+        pollContent.appendChild(p);
+      }
+
+      // Voting stopped (the timer ran out, or the presenter closed it): the
+      // question stays up, the answer is still to come.
+      function showClosed() {
+        disableInputs();
+        if (!pollContent.querySelector(".closed-box")) {
+          const box = document.createElement("div");
+          box.className = "closed-box";
+          box.textContent = "⏱ Voting is closed";
+          pollContent.appendChild(box);
+        }
+        updateStatus("Voting is closed", "waiting");
+      }
+
+      function render() {
+        if (!active) {
+          showWaitingMessage();
+          return;
+        }
+        const draw = {
+          poll: displayPoll,
+          wordcloud: displayCloud,
+          likert: displayLikert,
+          estimate: displayEstimate,
+          rank: displayRank,
+          hotspot: displayHotspot,
+        }[active.kind];
+        if (!draw) {
+          showWaitingMessage();
+          return;
+        }
+        draw(active.id);
+        if (closed[active.id] && !pollContent.querySelector(".answer-box")) showClosed();
+        if (revealed[active.id] !== undefined) showAnswer(active.id, revealed[active.id]);
+        drawTimer();
+      }
+
+      /* ---------------------------------------------------------- polls */
+
+      function correctSet(correct) {
+        if (correct == null || correct === "") return [];
+        if (Array.isArray(correct)) return correct.map(String);
+        const text = String(correct);
+        if (text.charAt(0) === "[") {
+          try {
+            return JSON.parse(text).map(String);
+          } catch (e) {
+            /* a value starting with [ */
+          }
+        }
+        return [text];
+      }
+
+      function labelOf(poll, value) {
+        const option = poll.options.find((o) => o.value === value);
+        return option ? option.label : value;
       }
 
       function displayPoll(pollId) {
-        const poll = polls[pollId];
-        if (!poll) {
-          console.error("Poll not found:", pollId);
+        const poll = cfg.polls[pollId];
+        const round = active.round || 1;
+        const max = poll.maxChoices === undefined || poll.maxChoices === null ? 1 : Number(poll.maxChoices);
+        const voted = hasVoted(pollId, round);
+        const mine = myAnswer(pollId, round);
+        const before = round > 1 ? myAnswer(pollId, round - 1) : null;
+
+        const options = poll.options
+          .map((o) => `<button type="button" data-value="${esc(o.value)}">${esc(o.label)}</button>`)
+          .join("");
+        let banner = "";
+        if (round > 1) {
+          const was = before
+            ? `Last round you said <strong>${esc([].concat(before).map((v) => labelOf(poll, v)).join(", "))}</strong>.`
+            : "";
+          banner = `<div class="round-banner">Round ${round}: talk it over with your neighbour, then vote again. ${was}</div>`;
+        }
+        const hint = max === 1 ? "" : `<p class="hint">${max === 0 ? "Pick all that apply" : `Pick up to ${max}`}</p>`;
+        pollContent.innerHTML = `
+          ${banner}
+          <div class="poll-question">${esc(poll.question)}</div>
+          ${hint}
+          <div class="poll-options" id="pollOptions">${options}</div>
+          ${max === 1 ? "" : '<button type="button" class="submit" id="pollSubmit" disabled>Submit</button>'}`;
+
+        const buttons = pollContent.querySelectorAll("#pollOptions button");
+        if (voted) {
+          [].concat(mine).forEach((v) => {
+            const b = pollContent.querySelector(`#pollOptions button[data-value="${CSS.escape(String(v))}"]`);
+            if (b) b.classList.add("selected");
+          });
+          disableInputs();
+          updateStatus("You already voted in this poll.", "waiting");
+          note("✅ Your vote has been recorded.");
           return;
         }
 
-        activePollId = pollId;
-        voted = hasVoted(pollId);
-
-        let optionsHtml = "";
-        poll.options.forEach((option) => {
-          optionsHtml += `<button onclick="submitVote('${option.value}', event)" data-value="${option.value}">${option.label}</button>`;
+        buttons.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            if (max === 1) {
+              submitVote(pollId, btn.getAttribute("data-value"), btn);
+              return;
+            }
+            const picked = pollContent.querySelectorAll("#pollOptions button.selected").length;
+            if (!btn.classList.contains("selected") && max > 0 && picked >= max) return;
+            btn.classList.toggle("selected");
+            document.getElementById("pollSubmit").disabled = !pollContent.querySelector("#pollOptions button.selected");
+          });
         });
-
-        pollContent.innerHTML = `
-    <div class="poll-question">${poll.question}</div>
-    <div class="poll-options" id="pollOptions">
-      ${optionsHtml}
-    </div>
-  `;
-
-        if (voted) {
-          disableButtons();
-          updateStatus("You already voted in this poll.", "waiting");
-          pollContent.innerHTML += `
-      <p style="margin-top:20px;color:#666;text-align:center;">
-        ✅ Your vote for this poll has already been recorded.
-      </p>`;
-        } else {
-          updateStatus("Poll active - Cast your vote!", "connected");
+        if (max !== 1) {
+          document.getElementById("pollSubmit").addEventListener("click", () => {
+            const chosen = Array.from(pollContent.querySelectorAll("#pollOptions button.selected")).map((b) =>
+              b.getAttribute("data-value")
+            );
+            if (chosen.length) submitVote(pollId, chosen, null);
+          });
         }
+        updateStatus(round > 1 ? `Round ${round} - vote again!` : "Poll active - Cast your vote!", "connected");
+      }
+
+      function submitVote(pollId, choice, button) {
+        if (!requireJoined() || !isOpen()) return;
+        const round = active.round || 1;
+        if (hasVoted(pollId, round)) {
+          alert("You have already voted on this poll!");
+          disableInputs();
+          return;
+        }
+        if (button) button.classList.add("selected");
+        disableInputs();
+        const content = { sender: "poll-plugin", type: "vote", poll: pollId };
+        if (Array.isArray(choice)) content.choices = choice;
+        else content.choice = choice;
+        send(content);
+        markVoted(pollId, round, choice);
+        const poll = cfg.polls[pollId];
+        updateStatus("Vote submitted: " + [].concat(choice).map((v) => labelOf(poll, v)).join(", "), "connected");
       }
 
       /* ------------------------------------------------- word clouds */
 
       function myWords(cloudId) {
-        try {
-          return JSON.parse(localStorage.getItem(`words_${cloudId}`) || "[]");
-        } catch (e) {
-          return [];
-        }
-      }
-
-      function rememberWord(cloudId, word) {
-        const words = myWords(cloudId);
-        words.push(word);
-        localStorage.setItem(`words_${cloudId}`, JSON.stringify(words));
+        const key = session ? `lp:${config.room}:${session}:${cloudId}:words` : `words_${cloudId}`;
+        return { key, words: load(key, []) };
       }
 
       // one word per submission: trimmed, collapsed, lower-cased so that
@@ -516,14 +1241,9 @@
       }
 
       function displayCloud(cloudId) {
-        const cloud = clouds[cloudId];
-        if (!cloud) return;
-
-        activePollId = cloudId;
-        const max = cloud.maxWords || 3;
-
+        const cloud = cfg.clouds[cloudId];
         pollContent.innerHTML = `
-          <div class="poll-question">${cloud.question}</div>
+          <div class="poll-question">${esc(cloud.question)}</div>
           <form class="word-form" id="wordForm">
             <input type="text" id="wordInput" maxlength="30" autocomplete="off"
                    placeholder="type a word" aria-label="your word">
@@ -535,28 +1255,23 @@
           evt.preventDefault();
           submitWord(cloudId);
         });
-
         renderMyWords(cloudId);
       }
 
       function renderMyWords(cloudId) {
-        const cloud = clouds[cloudId];
-        const max = cloud.maxWords || 3;
-        const words = myWords(cloudId);
+        const max = cfg.clouds[cloudId].maxWords || 3;
+        const words = myWords(cloudId).words;
         const box = document.getElementById("myWords");
         if (!box) return;
 
         box.innerHTML = words.length
-          ? "Your words: " +
-            words.map((w) => `<span class="chip">${w}</span>`).join(" ")
+          ? "Your words: " + words.map((w) => `<span class="chip">${esc(w)}</span>`).join(" ")
           : "";
 
         const left = max - words.length;
-        const input = document.getElementById("wordInput");
-        const button = document.getElementById("wordSubmit");
         if (left <= 0) {
-          if (input) input.disabled = true;
-          if (button) button.disabled = true;
+          document.getElementById("wordInput").disabled = true;
+          document.getElementById("wordSubmit").disabled = true;
           updateStatus(`Thanks — you sent ${words.length} of ${max} words`, "waiting");
         } else {
           updateStatus(`Send a word (${left} of ${max} left)`, "connected");
@@ -564,32 +1279,16 @@
       }
 
       function submitWord(cloudId) {
-        if (!joined) {
-          alert("Not connected yet. Please wait...");
-          return;
-        }
+        if (!requireJoined() || !isOpen()) return;
         const input = document.getElementById("wordInput");
         const word = normaliseWord(input.value);
         if (!word) return;
-
-        const max = clouds[cloudId].maxWords || 3;
-        if (myWords(cloudId).length >= max) return;
-
-        socket.emit("message", {
-          venue: config.url,
-          name: config.room,
-          hash: config.hash,
-          recipient: true,
-          content: {
-            sender: "wordcloud-plugin",
-            recipient: true,
-            type: "word",
-            cloud: cloudId,
-            word: word,
-          },
-        });
-
-        rememberWord(cloudId, word);
+        const max = cfg.clouds[cloudId].maxWords || 3;
+        const mine = myWords(cloudId);
+        if (mine.words.length >= max) return;
+        send({ sender: "wordcloud-plugin", type: "word", cloud: cloudId, word: word });
+        mine.words.push(word);
+        save(mine.key, mine.words);
         input.value = "";
         renderMyWords(cloudId);
       }
@@ -597,11 +1296,7 @@
       /* ------------------------------------------------------ likert */
 
       function displayLikert(likertId) {
-        const likert = likerts[likertId];
-        if (!likert) return;
-
-        activePollId = likertId;
-        voted = hasVoted(likertId);
+        const likert = cfg.likerts[likertId];
         const answers = likert.statements.map(() => null);
         const numeric = likert.numeric;
         const anchors = likert.anchors || [];
@@ -610,13 +1305,13 @@
 
         const rows = likert.statements
           .map((statement, s) => {
-            const label = likert.single ? "" : `<div class="statement">${statement}</div>`;
+            const label = likert.single ? "" : `<div class="statement">${esc(statement)}</div>`;
             const points = likert.labels
-              .map((l, p) => `<button type="button" data-s="${s}" data-p="${p}">${l}</button>`)
+              .map((l, p) => `<button type="button" data-s="${s}" data-p="${p}">${esc(l)}</button>`)
               .join("");
             const ends =
               numeric && (anchors[0] || anchors[1])
-                ? `<div class="likert-anchors"><span>${anchors[0] || ""}</span><span>${anchors[1] || ""}</span></div>`
+                ? `<div class="likert-anchors"><span>${esc(anchors[0] || "")}</span><span>${esc(anchors[1] || "")}</span></div>`
                 : "";
             return `<div class="likert-statement">${label}
               <div class="likert-points${numeric ? " numeric" : ""}" style="--cols:${cols}">${points}</div>${ends}</div>`;
@@ -624,17 +1319,14 @@
           .join("");
 
         pollContent.innerHTML = `
-          <div class="poll-question">${likert.question}</div>
+          <div class="poll-question">${esc(likert.question)}</div>
           ${rows}
-          <button type="button" class="likert-submit" id="likertSubmit" disabled>Submit</button>`;
+          <button type="button" class="submit" id="likertSubmit" disabled>Submit</button>`;
 
-        if (voted) {
-          disableButtons();
+        if (hasVoted(likertId)) {
+          disableInputs();
           updateStatus("You already answered this one.", "waiting");
-          pollContent.innerHTML += `
-            <p style="margin-top:20px;color:#666;text-align:center;">
-              ✅ Your answers have already been recorded.
-            </p>`;
+          note("✅ Your answers have already been recorded.");
           return;
         }
 
@@ -647,162 +1339,620 @@
               .forEach((b) => b.classList.toggle("selected", b === btn));
             const left = answers.filter((a) => a === null).length;
             document.getElementById("likertSubmit").disabled = left > 0;
-            updateStatus(
-              left > 0 ? `${left} left to answer` : "Ready to submit",
-              "connected"
-            );
+            updateStatus(left > 0 ? `${left} left to answer` : "Ready to submit", "connected");
           });
         });
-        document
-          .getElementById("likertSubmit")
-          .addEventListener("click", () => submitLikert(likertId, answers));
+        document.getElementById("likertSubmit").addEventListener("click", () => {
+          if (!requireJoined() || !isOpen() || hasVoted(likertId)) return;
+          send({ sender: "likert-plugin", type: "answer", likert: likertId, answers: answers });
+          disableInputs();
+          markVoted(likertId, 1, answers);
+          updateStatus("Thanks — your answers were sent", "connected");
+        });
         updateStatus(
           likert.statements.length > 1 ? "Rate each statement, then submit" : "Pick one, then submit",
           "connected"
         );
       }
 
-      function submitLikert(likertId, answers) {
-        if (!joined) {
-          alert("Not connected yet. Please wait...");
+      /* ---------------------------------------------------- estimate */
+
+      function numberText(x) {
+        return Number.isInteger(x) ? String(x) : String(Math.round(x * 1000) / 1000);
+      }
+
+      // "42%", but "42 kg"
+      function unitText(e) {
+        return e.unit ? (/^[%°‰]/.test(e.unit) ? e.unit : " " + e.unit) : "";
+      }
+
+      function displayEstimate(id) {
+        const e = cfg.estimates[id];
+        const unit = e.unit ? `<span class="unit">${esc(e.unit)}</span>` : "";
+        const ranged = typeof e.min === "number" && typeof e.max === "number";
+        const step = e.step || "any";
+        const bounds = `${typeof e.min === "number" ? `min="${e.min}"` : ""} ${typeof e.max === "number" ? `max="${e.max}"` : ""}`;
+        const start = ranged ? (e.min + e.max) / 2 : "";
+        pollContent.innerHTML = `
+          <div class="poll-question">${esc(e.question)}</div>
+          <div class="number-row">
+            <input type="number" id="estimateInput" inputmode="decimal" step="${step}" ${bounds}
+                   placeholder="your estimate" aria-label="your estimate">${unit}
+          </div>
+          ${
+            ranged
+              ? `<input type="range" class="slider" id="estimateSlider" ${bounds} step="${step}" value="${start}" aria-label="your estimate">
+                 <div class="slider-ends"><span>${numberText(e.min)}</span><span>${numberText(e.max)}</span></div>`
+              : ""
+          }
+          <button type="button" class="submit" id="estimateSubmit" disabled>Submit</button>`;
+
+        const input = document.getElementById("estimateInput");
+        const slider = document.getElementById("estimateSlider");
+        const submit = document.getElementById("estimateSubmit");
+        const mine = myAnswer(id);
+        if (mine !== null) {
+          input.value = mine;
+          if (slider) slider.value = mine;
+          disableInputs();
+          updateStatus("You already answered this one.", "waiting");
+          note(`✅ You said ${numberText(mine)}${unitText(e)}.`);
           return;
         }
-        if (hasVoted(likertId)) {
-          disableButtons();
-          return;
-        }
-        socket.emit("message", {
-          venue: config.url,
-          name: config.room,
-          hash: config.hash,
-          recipient: true,
-          content: {
-            sender: "likert-plugin",
-            recipient: true,
-            type: "answer",
-            likert: likertId,
-            answers: answers,
-          },
+        const valid = () => {
+          const v = Number(input.value);
+          return (
+            input.value !== "" && Number.isFinite(v) &&
+            (typeof e.min !== "number" || v >= e.min) && (typeof e.max !== "number" || v <= e.max)
+          );
+        };
+        input.addEventListener("input", () => {
+          submit.disabled = !valid();
+          if (slider && valid()) slider.value = input.value;
         });
-        disableButtons();
-        voted = true;
-        markVoted(likertId, JSON.stringify(answers));
-        updateStatus("Thanks — your answers were sent", "connected");
-      }
-
-      function disableButtons() {
-        const buttons = pollContent.querySelectorAll("button");
-        buttons.forEach((btn) => (btn.disabled = true));
-      }
-
-      function submitVote(choice, event) {
-        if (!joined) {
-          alert("Not connected to poll yet. Please wait...");
-          return;
+        if (slider) {
+          slider.addEventListener("input", () => {
+            input.value = slider.value;
+            submit.disabled = !valid();
+          });
         }
-        if (!activePollId) {
-          alert("No active poll!");
-          return;
-        }
-        if (voted || hasVoted(activePollId)) {
-          alert("You have already voted on this poll!");
-          disableButtons();
-          return;
-        }
-
-        disableButtons();
-        event.target.classList.add("selected");
-
-        socket.emit("message", {
-          venue: config.url,
-          name: config.room,
-          hash: config.hash,
-          recipient: true,
-          content: {
-            sender: "poll-plugin",
-            recipient: true,
-            type: "vote",
-            poll: activePollId,
-            choice: choice,
-          },
+        submit.addEventListener("click", () => {
+          if (!valid() || !requireJoined() || !isOpen() || hasVoted(id)) return;
+          const value = Number(input.value);
+          send({ sender: "estimate", type: "answer", id: id, value: value });
+          markVoted(id, 1, value);
+          disableInputs();
+          updateStatus(`Sent: ${numberText(value)}${unitText(e)}`, "connected");
         });
-
-        voted = true;
-        markVoted(activePollId, choice);
-        updateStatus("Vote submitted: " + choice, "connected");
+        updateStatus("Your best guess, then submit", "connected");
       }
 
-      window.submitVote = submitVote;
+      /* -------------------------------------------------------- rank */
+
+      function displayRank(id) {
+        const r = cfg.ranks[id];
+        const top = r.top || r.items.length;
+        const order = [];
+        pollContent.innerHTML = `
+          <div class="poll-question">${esc(r.question)}</div>
+          <p class="hint">Tap in order of preference${top < r.items.length ? `, your top ${top}` : ""}.</p>
+          <div class="rank-list" id="rankList">
+            ${r.items.map((item, i) => `<button type="button" data-item="${i}"><span class="place"></span><span>${esc(item)}</span></button>`).join("")}
+          </div>
+          <button type="button" class="link-button" id="rankReset">Start again</button>
+          <button type="button" class="submit" id="rankSubmit" disabled>Submit</button>`;
+
+        const mine = myAnswer(id);
+        const paint = (list) => {
+          pollContent.querySelectorAll("#rankList button").forEach((b) => {
+            const at = list.indexOf(Number(b.dataset.item));
+            b.classList.toggle("selected", at !== -1);
+            b.querySelector(".place").textContent = at === -1 ? "" : at + 1;
+          });
+        };
+        if (mine) {
+          paint(mine);
+          disableInputs();
+          updateStatus("You already answered this one.", "waiting");
+          note("✅ Your ranking has been recorded.");
+          return;
+        }
+        const submit = document.getElementById("rankSubmit");
+        pollContent.querySelectorAll("#rankList button").forEach((b) => {
+          b.addEventListener("click", () => {
+            const item = Number(b.dataset.item);
+            const at = order.indexOf(item);
+            if (at !== -1) order.splice(at, 1); // tap again to take it out
+            else if (order.length < top) order.push(item);
+            paint(order);
+            submit.disabled = order.length < Math.min(top, r.items.length);
+            const left = top - order.length;
+            updateStatus(left > 0 ? `${left} more to place` : "Ready to submit", "connected");
+          });
+        });
+        document.getElementById("rankReset").addEventListener("click", () => {
+          order.length = 0;
+          paint(order);
+          submit.disabled = true;
+        });
+        submit.addEventListener("click", () => {
+          if (!requireJoined() || !isOpen() || hasVoted(id)) return;
+          send({ sender: "rank", type: "answer", id: id, order: order.slice() });
+          markVoted(id, 1, order.slice());
+          disableInputs();
+          updateStatus("Thanks — your ranking was sent", "connected");
+        });
+        updateStatus(`Tap your first choice`, "connected");
+      }
+
+      /* ----------------------------------------------------- hotspot */
+
+      function imageUrl(src) {
+        try {
+          return new URL(src, new URL(deckUrl, location.href)).href;
+        } catch (e) {
+          return src;
+        }
+      }
+
+      function displayHotspot(id) {
+        const h = cfg.hotspots[id];
+        pollContent.innerHTML = `
+          <div class="poll-question">${esc(h.question)}</div>
+          <div class="hotspot-frame" id="hotFrame">
+            <img src="${esc(imageUrl(h.image))}" alt="${esc(h.alt || "")}" draggable="false">
+            <svg id="hotMarks" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg>
+          </div>
+          <button type="button" class="submit" id="hotSubmit" disabled>Submit</button>`;
+
+        const frame = document.getElementById("hotFrame");
+        const submit = document.getElementById("hotSubmit");
+        let point = myAnswer(id);
+        const paint = () => drawHotMarks(id, point);
+        frame.querySelector("img").addEventListener("load", paint);
+        if (point) {
+          paint();
+          disableInputs();
+          updateStatus("You already answered this one.", "waiting");
+          note("✅ Your tap has been recorded.");
+          return;
+        }
+        frame.addEventListener("click", (evt) => {
+          if (submit.disabled && hasVoted(id)) return;
+          const box = frame.getBoundingClientRect();
+          point = [
+            Math.max(0, Math.min(1, (evt.clientX - box.left) / box.width)),
+            Math.max(0, Math.min(1, (evt.clientY - box.top) / box.height)),
+          ];
+          paint();
+          submit.disabled = false;
+          updateStatus("Move it with another tap, or submit", "connected");
+        });
+        submit.addEventListener("click", () => {
+          if (!point || !requireJoined() || !isOpen() || hasVoted(id)) return;
+          send({ sender: "hotspot", type: "answer", id: id, x: point[0], y: point[1] });
+          markVoted(id, 1, point);
+          disableInputs();
+          updateStatus("Thanks — your tap was sent", "connected");
+        });
+        updateStatus("Tap the image, then submit", "connected");
+      }
+
+      // In the SVG's 1000×1000 box, stretched over the image: the pin, and
+      // once revealed the answer circle (its radius is a share of the width).
+      function drawHotMarks(id, point, answer) {
+        const svg = document.getElementById("hotMarks");
+        const img = document.querySelector("#hotFrame img");
+        if (!svg || !img) return;
+        const aspect = img.naturalWidth ? img.naturalHeight / img.naturalWidth : 1;
+        let marks = "";
+        if (answer) {
+          marks += `<ellipse class="target" cx="${answer[0] * 1000}" cy="${answer[1] * 1000}" rx="${answer[2] * 1000}" ry="${(answer[2] * 1000) / aspect}"/>`;
+        }
+        if (point) {
+          marks += `<ellipse class="pin" cx="${point[0] * 1000}" cy="${point[1] * 1000}" rx="14" ry="${14 / aspect}"/>`;
+        }
+        svg.innerHTML = marks;
+      }
+
+      /* ------------------------------------------------------- answers */
+
+      // Shown only when the presenter reveals it, never before.
+      function showAnswer(id, correct) {
+        if (!active || id !== active.id) return;
+        if (document.getElementById("answerBox")) return; // already shown
+        const kind = active.kind;
+        let text = "";
+        let verdict = "";
+
+        if (kind === "poll") {
+          const poll = cfg.polls[id];
+          const right = correctSet(correct);
+          if (!right.length) return;
+          const mine = myAnswer(id, active.round || 1);
+          text = right.map((v) => esc(labelOf(poll, v))).join(", ");
+          if (mine !== null) {
+            const chosen = [].concat(mine);
+            const ok = Array.isArray(mine)
+              ? chosen.length === right.length && chosen.every((v) => right.includes(v))
+              : right.includes(mine);
+            verdict = ok
+              ? '<div class="verdict right">✅ You were right</div>'
+              : `<div class="verdict wrong">❌ You answered ${esc(chosen.map((v) => labelOf(poll, v)).join(", "))}</div>`;
+          }
+          pollContent.querySelectorAll("#pollOptions button[data-value]").forEach((btn) => {
+            const v = btn.getAttribute("data-value");
+            if (right.includes(v)) btn.classList.add("is-correct");
+            else if (mine !== null && [].concat(mine).includes(v)) btn.classList.add("is-wrong");
+          });
+        } else if (kind === "estimate") {
+          const e = cfg.estimates[id];
+          if (typeof e.answer !== "number") return;
+          const unit = unitText(e);
+          text = esc(numberText(e.answer) + unit);
+          const mine = myAnswer(id);
+          if (mine !== null) {
+            const off = mine - e.answer;
+            verdict = `<div class="verdict">You said ${esc(numberText(mine) + unit)}: ${
+              off === 0 ? "spot on" : esc(numberText(Math.abs(off))) + (off > 0 ? " too high" : " too low")
+            }</div>`;
+          }
+        } else if (kind === "hotspot") {
+          const h = cfg.hotspots[id];
+          if (!Array.isArray(h.answer)) return;
+          const mine = myAnswer(id);
+          drawHotMarks(id, mine, h.answer);
+          text = "the green circle";
+          if (mine) {
+            const img = document.querySelector("#hotFrame img");
+            const aspect = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 1;
+            const dx = mine[0] - h.answer[0];
+            const dy = (mine[1] - h.answer[1]) * aspect;
+            verdict = Math.sqrt(dx * dx + dy * dy) <= h.answer[2]
+              ? '<div class="verdict right">✅ You were right</div>'
+              : '<div class="verdict wrong">❌ Not quite</div>';
+          }
+        } else {
+          return;
+        }
+
+        const box = document.createElement("div");
+        box.id = "answerBox";
+        box.className = "answer-box";
+        box.innerHTML = `<strong>${kind === "poll" && correctSet(correct).length > 1 ? "Correct answers" : "Correct answer"}</strong><div>${text}</div>${verdict}`;
+        pollContent.appendChild(box);
+      }
+
+      /* --------------------------------------------------------- timer */
+
+      function drawTimer() {
+        const el = document.getElementById("timer");
+        if (!timer || !active || timer.id !== active.id) {
+          el.hidden = true;
+          return;
+        }
+        const left = timer.done ? 0 : timer.running ? Math.max(0, timer.endsAt - Date.now()) : timer.remaining;
+        const s = Math.ceil(left / 1000);
+        el.hidden = false;
+        el.classList.toggle("low", !timer.done && left <= 10000);
+        document.getElementById("timerFill").style.width =
+          (timer.duration > 0 ? (left / timer.duration) * 100 : 0).toFixed(1) + "%";
+        document.getElementById("timerText").textContent = timer.done
+          ? "Time's up"
+          : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}${timer.running ? "" : " (paused)"}`;
+      }
+      setInterval(drawTimer, 250);
+
+      /* ---------------------------------------------------- questions */
+
+      const qa = { items: [], session: null };
+
+      function qaKey(what) {
+        return `lp:${config.room}:${qa.session || session || "-"}:qa:${what}`;
+      }
+
+      function setTab(which) {
+        const ask = which === "ask";
+        document.getElementById("tabPoll").setAttribute("aria-selected", String(!ask));
+        document.getElementById("tabAsk").setAttribute("aria-selected", String(ask));
+        document.getElementById("pollPane").hidden = ask;
+        document.getElementById("askPane").hidden = !ask;
+        if (ask) {
+          save(qaKey("seen"), qa.items.length);
+          drawAsk();
+        } else {
+          document.getElementById("pollBadge").textContent = "";
+        }
+        drawAskBadge();
+      }
+
+      function drawAskBadge() {
+        const unseen = qa.items.length - load(qaKey("seen"), 0);
+        const badge = document.getElementById("askBadge");
+        badge.textContent = !document.getElementById("askPane").hidden || unseen <= 0 ? "" : unseen;
+      }
+
+      function drawAsk() {
+        const pane = document.getElementById("askPane");
+        if (pane.hidden) return;
+        const mine = load(qaKey("mine"), []);
+        const pending = load(qaKey("pending"), []).filter((p) => !qa.items.some((q) => q.id === p.id));
+        const upvoted = load(qaKey("votes"), []);
+        const draft = (document.getElementById("askText") || {}).value || "";
+        const ordered = qa.items.slice().sort(
+          (a, b) => (a.status === "answered") - (b.status === "answered") || b.votes - a.votes || a.t - b.t
+        );
+        const items = ordered
+          .map((q) => {
+            const own = mine.includes(q.id);
+            const on = upvoted.includes(q.id);
+            return `<li class="qa-item${q.status === "answered" ? " answered" : ""}">
+                <button type="button" class="vote${on ? " selected" : ""}" data-id="${esc(q.id)}" ${own ? "disabled" : ""}
+                  aria-label="${on ? "Take back your upvote" : "Upvote"}">▲<span>${q.votes}</span></button>
+                <div class="text">${esc(q.text)}${own ? '<span class="tag">yours</span>' : ""}${
+                  q.status === "answered" ? '<span class="tag">answered</span>' : ""
+                }</div></li>`;
+          })
+          .concat(
+            pending.map(
+              (p) => `<li class="qa-item"><button type="button" class="vote" disabled>▲<span>0</span></button>
+                <div class="text">${esc(p.text)}<span class="tag">waiting for approval</span></div></li>`
+            )
+          )
+          .join("");
+        pane.innerHTML = `
+          <form class="ask-form" id="askForm">
+            <textarea id="askText" maxlength="280" placeholder="Ask the presenter a question" aria-label="your question"></textarea>
+            <div class="ask-meta"><span id="askLeft">280</span><button type="submit">Ask</button></div>
+          </form>
+          ${items ? `<ol class="qa-list">${items}</ol>` : '<p class="note">No questions yet. Be the first.</p>'}`;
+        const text = document.getElementById("askText");
+        text.value = draft;
+        const left = () => (document.getElementById("askLeft").textContent = 280 - text.value.length);
+        left();
+        text.addEventListener("input", left);
+        document.getElementById("askForm").addEventListener("submit", (evt) => {
+          evt.preventDefault();
+          const question = text.value.replace(/\s+/g, " ").trim();
+          if (question.length < 3 || !requireJoined()) return;
+          if (mine.length + load(qaKey("pending"), []).length >= 5) {
+            alert("You can ask up to 5 questions.");
+            return;
+          }
+          send({ sender: "qa", type: "ask", text: question });
+          text.value = "";
+          left();
+          toast("Question sent");
+        });
+        pane.querySelectorAll(".vote[data-id]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            if (!requireJoined()) return;
+            const id = btn.getAttribute("data-id");
+            const votes = load(qaKey("votes"), []);
+            const on = !votes.includes(id);
+            send({ sender: "qa", type: "vote", id: id, on: on });
+            save(qaKey("votes"), on ? votes.concat([id]) : votes.filter((v) => v !== id));
+            // shown at once; the host's list follows
+            const item = qa.items.find((q) => q.id === id);
+            if (item) item.votes += on ? 1 : -1;
+            drawAsk();
+          });
+        });
+      }
+
+      function handleQa(content) {
+        if (content.type === "list") {
+          if (content.session) qa.session = content.session;
+          qa.items = Array.isArray(content.items) ? content.items : [];
+          drawAsk();
+          drawAskBadge();
+        } else if (content.type === "asked") {
+          if (content.session) qa.session = content.session;
+          if (content.pending) {
+            save(qaKey("pending"), load(qaKey("pending"), []).concat([{ id: content.id, text: content.text }]));
+          }
+          save(qaKey("mine"), load(qaKey("mine"), []).concat([content.id]));
+          drawAsk();
+        }
+      }
+
+      /* ------------------------------------------- signals, reactions */
+
+      const signalUntil = {}; // kind -> time it runs out
+
+      function windowMs() {
+        return (Number(cfg.signalWindow) || 120) * 1000;
+      }
+
+      function drawSignals() {
+        document.querySelectorAll("[data-signal]").forEach((btn) => {
+          const on = (signalUntil[btn.dataset.signal] || 0) > Date.now();
+          btn.classList.toggle("on", on);
+          btn.setAttribute("aria-pressed", String(on));
+        });
+      }
+      setInterval(drawSignals, 5000);
+
+      function setupBar() {
+        const signals = cfg.signals === true;
+        const reactions = cfg.reactions === true;
+        document.getElementById("bar").hidden = !signals && !reactions;
+        document.getElementById("signalGroup").hidden = !signals;
+        document.getElementById("reactGroup").hidden = !reactions;
+        document.querySelectorAll("[data-signal]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            if (!requireJoined()) return;
+            const kind = btn.dataset.signal;
+            const on = !((signalUntil[kind] || 0) > Date.now());
+            signalUntil[kind] = on ? Date.now() + windowMs() : 0;
+            send({ sender: "signal", type: "signal", kind: kind, on: on });
+            drawSignals();
+            if (on) toast("Sent — only the presenter sees it");
+          });
+        });
+        const group = document.getElementById("reactGroup");
+        group.innerHTML = EMOJI.map((e, i) => `<button type="button" data-emoji="${i}" aria-label="React ${e}">${e}</button>`).join("");
+        let last = 0;
+        group.querySelectorAll("button").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            if (!joined || Date.now() - last < 1000) return;
+            last = Date.now();
+            send({ sender: "signal", type: "react", emoji: Number(btn.dataset.emoji) });
+            btn.classList.remove("pop");
+            void btn.offsetWidth;
+            btn.classList.add("pop");
+          });
+        });
+      }
+
+      /* ---------------------------------------------------------- quiz */
+
+      const quiz = { nick: null, score: 0 };
+
+      function nickKey() {
+        return `lp:${config.room}:nickname`;
+      }
+
+      function drawMe() {
+        const me = document.getElementById("me");
+        if (!cfg.quiz) {
+          me.textContent = "";
+          return;
+        }
+        const nick = quiz.nick || load(nickKey(), "");
+        me.innerHTML = `${nick ? esc(nick) : "No nickname"} · ${quiz.score} pts<button type="button" id="changeNick">change</button>`;
+        document.getElementById("changeNick").addEventListener("click", askNickname);
+      }
+
+      function askNickname() {
+        const current = load(nickKey(), "") || "";
+        const box = document.createElement("div");
+        box.className = "round-banner";
+        box.id = "nickBox";
+        box.innerHTML = `<strong>Quiz</strong>: pick a nickname for the leaderboard (or skip, and you'll be a numbered player).
+          <form class="nick-form" id="nickForm"><input id="nickInput" maxlength="20" autocomplete="off" placeholder="nickname" value="${esc(current)}">
+          <button type="submit">Save</button></form>
+          <button type="button" class="link-button" id="nickSkip">Skip</button>`;
+        const old = document.getElementById("nickBox");
+        if (old) old.remove();
+        statusEl.after(box);
+        const done = (nick) => {
+          save(nickKey(), nick);
+          box.remove();
+          sayHello();
+        };
+        document.getElementById("nickForm").addEventListener("submit", (evt) => {
+          evt.preventDefault();
+          done(document.getElementById("nickInput").value.trim().slice(0, 20));
+        });
+        document.getElementById("nickSkip").addEventListener("click", () => done(""));
+      }
+
+      function sayHello() {
+        if (!cfg.quiz || !joined) return;
+        send({ sender: "quiz", type: "hello", nickname: load(nickKey(), "") || "" });
+        drawMe();
+      }
+
+      function handleQuiz(content) {
+        if (content.type === "you") {
+          quiz.nick = content.nickname;
+          quiz.score = content.score || 0;
+          drawMe();
+        } else if (content.type === "result") {
+          quiz.score = content.score;
+          drawMe();
+          const place = content.rank ? ` · ${ordinal(content.rank)} of ${content.players}` : "";
+          toast(
+            (content.right ? `✅ +${content.points}` : "❌ No points this time") +
+              ` · ${content.score} pts${place}`,
+            5000
+          );
+        }
+      }
+
+      function ordinal(n) {
+        const s = ["th", "st", "nd", "rd"];
+        const v = n % 100;
+        return n + (s[(v - 20) % 10] || s[v] || s[0]);
+      }
+
+      let toastTimer = null;
+      function toast(text, ms) {
+        const el = document.getElementById("toast");
+        el.textContent = text;
+        el.classList.add("shown");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove("shown"), ms || 2500);
+      }
 
       /* --------------------------------------------------------- socket */
 
       function sameRoom(room) {
         return (
+          room &&
           room.venue == config.url &&
           room.name == config.room &&
           room.hash == config.hash
         );
       }
 
-      // Shown only when the presenter reveals it, never before.
-      function showAnswer(pollId, correct) {
-        if (pollId !== activePollId) return;
-        const poll = polls[pollId];
-        if (!poll || !correct) return;
-        if (document.getElementById("answerBox")) return; // already shown
-
-        const option = poll.options.find((o) => o.value === correct);
-        if (!option) return;
-
-        const mine = myChoice(pollId);
-        let verdict = "";
-        if (mine) {
-          verdict =
-            mine === correct
-              ? '<div class="verdict right">✅ You were right</div>'
-              : '<div class="verdict wrong">❌ You answered ' +
-                mine +
-                "</div>";
-        }
-
-        const box = document.createElement("div");
-        box.id = "answerBox";
-        box.className = "answer-box";
-        box.innerHTML =
-          "<strong>Correct answer</strong><div>" +
-          option.label +
-          "</div>" +
-          verdict;
-        pollContent.appendChild(box);
-
-        // mark the buttons themselves
-        pollContent.querySelectorAll("button[data-value]").forEach((btn) => {
-          if (btn.getAttribute("data-value") === correct) {
-            btn.classList.add("is-correct");
-          } else if (mine && btn.getAttribute("data-value") === mine) {
-            btn.classList.add("is-wrong");
+      function handleControl(c) {
+        if (c.sender === "poll-control") {
+          if (c.type === "activate-poll") {
+            if (c.session) session = c.session;
+            const kind = kindOf(c.pollId);
+            if (!kind) return;
+            const round = c.round || 1;
+            if (active && active.id === c.pollId && active.round === round) return; // duplicate
+            active = { id: c.pollId, kind: kind, round: round };
+            render();
+            // someone typing a question is left to finish it
+            if (!document.getElementById("pollPane").hidden) return;
+            document.getElementById("pollBadge").textContent = "new";
+            toast("A new question is up: see Poll");
+          } else if (c.type === "deactivate-poll") {
+            active = null;
+            render();
+          } else if (c.type === "start-round") {
+            if (c.session) session = c.session;
+            delete closed[c.pollId];
+            delete revealed[c.pollId];
+            if (active && active.id === c.pollId) {
+              active.round = c.round;
+              render();
+            }
+          } else if (c.type === "reveal-answer") {
+            revealed[c.pollId] = c.correct;
+            showAnswer(c.pollId, c.correct);
+          } else if (c.type === "hide-answer") {
+            // the presenter stepped back: the answer is not given after all
+            delete revealed[c.pollId];
+            if (active && active.id === c.pollId) render();
+          } else if (c.type === "close-poll") {
+            closed[c.pollId] = true;
+            if (active && active.id === c.pollId && !document.getElementById("answerBox")) showClosed();
+          } else if (c.type === "reopen-poll") {
+            delete closed[c.pollId];
+            if (active && active.id === c.pollId) render();
           }
-        });
-      }
-
-      function handlePollControl(content) {
-        const pollControl = content.custom || content;
-        if (!pollControl || pollControl.sender !== "poll-control") return;
-
-        if (pollControl.type === "activate-poll") {
-          if (activePollId === pollControl.pollId) return; // duplicate
-          if (clouds[pollControl.pollId]) {
-            displayCloud(pollControl.pollId);
-          } else if (likerts[pollControl.pollId]) {
-            displayLikert(pollControl.pollId);
-          } else {
-            displayPoll(pollControl.pollId);
-          }
-        } else if (pollControl.type === "deactivate-poll") {
-          activePollId = null;
-          showWaitingMessage();
-        } else if (pollControl.type === "reveal-answer") {
-          showAnswer(pollControl.pollId, pollControl.correct);
+        } else if (c.sender === "timer" && c.type === "timer") {
+          timer = {
+            id: c.pollId,
+            duration: c.duration,
+            remaining: c.remaining,
+            endsAt: Date.now() + c.remaining,
+            running: !!c.running,
+            done: !!c.done,
+          };
+          drawTimer();
+        } else if (c.sender === "qa") {
+          handleQa(c);
+        } else if (c.sender === "quiz") {
+          handleQuiz(c);
+        } else if (c.sender === "signal" && c.type === "cleared") {
+          Object.keys(signalUntil).forEach((k) => (signalUntil[k] = 0));
+          drawSignals();
         }
       }
 
@@ -822,16 +1972,19 @@
             }
 
             joined = true;
-            showWaitingMessage();
+            render();
 
-            // Ask the host which poll is currently active (late join).
+            // Ask the host what is going on: the active question, the
+            // questions asked so far, the timer. It answers this page alone.
             socket.emit("message", {
               venue: config.url,
               name: config.room,
               hash: config.hash,
               recipient: true,
-              content: { sender: "poll-page", type: "request-active-poll" },
+              content: { sender: "poll-page", type: "request-active-poll", device },
             });
+            sayHello();
+            if (cfg.quiz && load(nickKey(), null) === null) askNickname();
           }
         );
       }
@@ -842,6 +1995,7 @@
           withCredentials: true,
         });
 
+        // also after every reconnect: check in and join again
         socket.on("connect", function () {
           updateStatus("Connected to server, joining poll...", "connecting");
           const username = "poll-" + Math.random().toString(36).substr(2, 9);
@@ -854,36 +2008,47 @@
           });
         });
 
+        // Announcements only: see the note at the top.
         socket.on("announcement", function ({ room, content }) {
-          if (!sameRoom(room)) return;
-          handlePollControl(content);
+          if (!sameRoom(room) || !content || !content.custom) return;
+          handleControl(content.custom);
         });
 
-        socket.on("message", function ({ room, content }) {
-          if (!sameRoom(room)) return;
-          handlePollControl(content);
+        socket.on("kicked_out", function () {
+          joined = false;
+          active = null;
+          updateStatus("The presenter ended the session", "waiting");
+          pollContent.innerHTML = `<div class="waiting-message"><h2>👋 That's all</h2><p>The presenter has closed the poll. Thanks for taking part!</p></div>`;
+          setTimeout(attemptJoinRoom, 5000);
         });
 
         socket.on("disconnect", function () {
           joined = false;
-          updateStatus("Disconnected from server", "error");
-          disableButtons();
+          updateStatus("Disconnected from server - reconnecting...", "error");
+          disableInputs();
         });
 
         socket.on("connect_error", function (error) {
           console.error("Connection error:", error);
-          updateStatus("Connection failed. Please refresh the page.", "error");
+          updateStatus("Connection failed. Retrying...", "error");
         });
       }
 
       /* ----------------------------------------------------------- boot */
 
       (async function () {
-        const cfg = await loadConfig();
-        if (!cfg) {
+        const found = await loadConfig();
+        if (!found) {
           showSetupHelp();
           return;
         }
+        cfg = found;
+        cfg.polls = cfg.polls || {};
+        cfg.clouds = cfg.clouds || {};
+        cfg.likerts = cfg.likerts || {};
+        cfg.estimates = cfg.estimates || {};
+        cfg.ranks = cfg.ranks || {};
+        cfg.hotspots = cfg.hotspots || {};
 
         // Mirror seminar.js: venue falls back to the host, room to the venue.
         config = {
@@ -892,11 +2057,15 @@
           room: cfg.room || cfg.url || location.host,
           hash: cfg.hash,
         };
-        polls = cfg.polls || {};
-        clouds = cfg.clouds || {};
-        likerts = cfg.likerts || {};
 
         if (cfg.title) document.getElementById("pollTitle").textContent = cfg.title;
+        if (cfg.qa !== false) {
+          document.getElementById("tabs").hidden = false;
+          document.getElementById("tabPoll").addEventListener("click", () => setTab("poll"));
+          document.getElementById("tabAsk").addEventListener("click", () => setTab("ask"));
+        }
+        setupBar();
+        drawMe();
         updateStatus("Connecting to server...", "connecting");
         connect();
       })();

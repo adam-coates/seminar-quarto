@@ -1051,3 +1051,746 @@
 #livepoll-menu-slot p {
   margin: 6px 0;
 }
+
+/* =================================================================== 2.0 */
+
+/* ------------------------------------------- polls: several choices, rounds */
+
+.reveal .poll-hint {
+  margin: 0 0 0.4em;
+  color: gray;
+  font-size: 0.6em;
+}
+
+.reveal .poll-submit {
+  display: block;
+  min-width: 30%;
+  margin: 0.4em auto 0;
+  padding: 0.35em 1.2em;
+  font-size: 0.65em;
+  cursor: pointer;
+}
+
+.reveal .poll-submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.reveal .lp-round-note {
+  margin-top: 0.5em;
+  font-size: 0.6em;
+  color: var(--r-link-color, #2a76dd);
+}
+
+.reveal .livepoll-question .lp-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  margin: -0.3em 0 0.6em;
+  font-size: 0.8em;
+  color: var(--lp-muted);
+}
+
+.reveal .livepoll-question .lp-round-badge:empty {
+  display: none;
+}
+
+.reveal .livepoll-question .lp-round-badge {
+  padding: 0.1em 0.7em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lp-accent) 14%, transparent);
+  color: var(--lp-accent);
+  font-weight: 700;
+}
+
+/* the earlier round: a marker on the track where its share reached */
+.reveal .livepoll-question .lp-track {
+  position: relative;
+}
+
+.reveal .livepoll-question .lp-prev {
+  position: absolute;
+  top: -0.15em;
+  bottom: -0.15em;
+  width: 0.22em;
+  margin-left: -0.11em;
+  border-radius: 0.1em;
+  background: var(--lp-fg);
+  opacity: 0.55;
+  transition: left 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal .livepoll-question .lp-rounds .lp-track {
+  overflow: visible;
+}
+
+.reveal .livepoll-question .lp-was {
+  margin-left: 0.6em;
+  color: var(--lp-muted);
+  font-size: 0.75em;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.reveal .livepoll-question.lp-results-hidden .lp-prev,
+.reveal .livepoll-question.lp-results-hidden .lp-was {
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------------ timer */
+
+.reveal .lp-timer {
+  position: relative;
+  width: 3.4em;
+  height: 3.4em;
+  flex: 0 0 auto;
+  color: var(--r-link-color, #2a76dd);
+}
+
+.reveal .lp-timer[hidden] {
+  display: none;
+}
+
+.reveal .lp-timer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.reveal .lp-timer circle {
+  fill: none;
+  stroke-width: 3.2;
+}
+
+.reveal .lp-timer .lp-timer-track {
+  stroke: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.reveal .lp-timer .lp-timer-ring {
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.reveal .lp-timer .lp-timer-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.9em;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-main-color, #222);
+}
+
+.reveal .lp-timer.lp-timer-low {
+  color: #dc2626;
+}
+
+.reveal .lp-timer.lp-timer-low .lp-timer-text {
+  color: #dc2626;
+}
+
+.reveal .lp-timer.lp-timer-paused {
+  opacity: 0.55;
+}
+
+.reveal .lp-timer.lp-timer-done .lp-timer-ring {
+  stroke: transparent;
+}
+
+/* a classic slide: in the top-right corner */
+.reveal .lp-timer.lp-timer-float {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 0.6em;
+  z-index: 2;
+}
+
+.reveal .livepoll-question .lp-side .lp-timer {
+  font-size: 1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .lp-timer .lp-timer-ring,
+  .reveal .livepoll-question .lp-prev {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------- panels without a side column */
+
+.reveal .livepoll-question.lp-noside {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reveal .livepoll-question .lp-empty {
+  margin: auto;
+  color: var(--lp-faint);
+  font-size: 1.05em;
+  text-align: center;
+}
+
+.reveal .livepoll-question .lp-empty[hidden] {
+  display: none;
+}
+
+/* --------------------------------------------------------------- estimate */
+
+.reveal .livepoll-question .lp-estimate {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.reveal .livepoll-question .lp-est-plot {
+  position: relative;
+  flex: 1;
+  min-height: 6em;
+  margin-top: 2.8em; /* room for the line labels */
+  border-bottom: 2px solid var(--lp-line);
+}
+
+.reveal .livepoll-question .lp-est-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.reveal .livepoll-question .lp-est-bar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 0;
+  border-radius: 0.15em 0.15em 0 0;
+  background: color-mix(in srgb, var(--lp-accent) 72%, var(--lp-bg));
+  transition: height 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal .livepoll-question .lp-est-bar span {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  padding-bottom: 0.1em;
+  font-size: 0.6em;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .livepoll-question .lp-est-line {
+  position: absolute;
+  top: -1.4em;
+  bottom: 0;
+  width: 0;
+  border-left: 2px dashed var(--lp-fg);
+  transition: left 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 1;
+}
+
+.reveal .livepoll-question .lp-est-line[hidden] {
+  display: none;
+}
+
+.reveal .livepoll-question .lp-est-line span {
+  position: absolute;
+  top: 0;
+  left: 0.35em;
+  font-size: 0.62em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reveal .livepoll-question .lp-est-answer {
+  top: -2.6em;
+  border-left: 3px solid var(--lp-good);
+  color: var(--lp-good);
+}
+
+.reveal .livepoll-question .lp-est-answer span {
+  left: auto;
+  right: 0.35em;
+}
+
+.reveal .livepoll-question .lp-est-axis {
+  position: relative;
+  height: 1.3em;
+  margin-top: 0.3em;
+  font-size: 0.62em;
+  color: var(--lp-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .livepoll-question .lp-est-axis span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.reveal .livepoll-question .lp-est-summary {
+  margin-top: 0.4em;
+  color: var(--lp-muted);
+  font-size: 0.72em;
+}
+
+.reveal .livepoll-question .lp-estimate .lp-empty {
+  position: absolute;
+  top: 40%;
+  left: 0;
+  right: 0;
+}
+
+/* ------------------------------------------------------------------- rank */
+
+.reveal .livepoll-question .lp-rank {
+  --lp-rank-h: clamp(1.5em, calc(15em / var(--lp-items)), 2.6em);
+  --lp-rank-gap: 0.35em;
+  position: relative;
+  height: calc(var(--lp-items) * (var(--lp-rank-h) + var(--lp-rank-gap)));
+  margin: auto 0;
+}
+
+.reveal .livepoll-question .lp-rank-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--lp-rank-h);
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1.2fr) minmax(0, 1fr) 7.5em;
+  align-items: center;
+  column-gap: 0.6em;
+  transform: translateY(calc(var(--lp-place, 0) * (var(--lp-rank-h) + var(--lp-rank-gap))));
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal .livepoll-question .lp-rank-pos {
+  font-weight: 800;
+  color: var(--lp-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .livepoll-question .lp-rank-label {
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+/* the shared .lp-track rule names a grid area these rows do not have */
+.reveal .livepoll-question .lp-rank-row .lp-track,
+.reveal .livepoll-question .lp-leader-row .lp-track {
+  grid-area: auto;
+  height: 1em;
+}
+
+.reveal .livepoll-question .lp-rank-row.lp-lead .lp-fill {
+  background: var(--lp-accent);
+}
+
+.reveal .livepoll-question .lp-rank-stat {
+  color: var(--lp-muted);
+  font-size: 0.7em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal .livepoll-question .lp-rank-row,
+  .reveal .livepoll-question .lp-est-bar,
+  .reveal .livepoll-question .lp-est-line {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- hotspot */
+
+.reveal .livepoll-question .lp-hotspot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.reveal .livepoll-question .lp-hot-frame {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.reveal .livepoll-question .lp-hot-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0;
+  object-fit: contain;
+}
+
+.reveal .livepoll-question .lp-hot-heat,
+.reveal .livepoll-question .lp-hot-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.reveal .livepoll-question .lp-hot-dot {
+  fill: #111;
+  stroke: #fff;
+  stroke-width: 1;
+  opacity: 0.8;
+}
+
+.reveal .livepoll-question .lp-hot-answer {
+  fill: color-mix(in srgb, var(--lp-good) 18%, transparent);
+  stroke: var(--lp-good);
+  stroke-width: 3;
+}
+
+.reveal .livepoll-question .lp-hot-score {
+  fill: var(--lp-good);
+  font-weight: 800;
+  font-size: 18px;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+}
+
+/* results hidden: the new kinds keep their frame, not their answers */
+.reveal .livepoll-question.lp-results-hidden .lp-est-bars,
+.reveal .livepoll-question.lp-results-hidden .lp-est-line,
+.reveal .livepoll-question.lp-results-hidden .lp-est-summary,
+.reveal .livepoll-question.lp-results-hidden .lp-rank-row .lp-fill,
+.reveal .livepoll-question.lp-results-hidden .lp-rank-pos,
+.reveal .livepoll-question.lp-results-hidden .lp-rank-stat,
+.reveal .livepoll-question.lp-results-hidden .lp-hot-heat,
+.reveal .livepoll-question.lp-results-hidden .lp-hot-marks {
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------ Q&A board */
+
+.reveal .livepoll-question .lp-qa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reveal .livepoll-question .lp-qa-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8em;
+  margin: 0;
+  padding: 0.45em 0.7em;
+  border-radius: 0.45em;
+  background: var(--lp-track);
+  line-height: 1.25;
+}
+
+.reveal .livepoll-question .lp-qa-votes {
+  flex: 0 0 auto;
+  min-width: 2.2em;
+  font-weight: 800;
+  color: var(--lp-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal .livepoll-question .lp-qa-votes::before {
+  content: "\25B2\00A0";
+  font-size: 0.75em;
+}
+
+.reveal .livepoll-question .lp-qa-text {
+  overflow-wrap: anywhere;
+}
+
+.reveal .livepoll-question .lp-qa-answered {
+  opacity: 0.5;
+}
+
+.reveal .livepoll-question .lp-qa-answered .lp-qa-text::after {
+  content: " \2713";
+  color: var(--lp-good);
+  font-weight: 800;
+}
+
+/* ------------------------------------------------------------ leaderboard */
+
+.reveal .livepoll-question .lp-leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reveal .livepoll-question .lp-leader-row {
+  display: grid;
+  grid-template-columns: 1.8em minmax(0, 12em) minmax(0, 1fr) 4.5em;
+  align-items: center;
+  column-gap: 0.7em;
+  margin: 0;
+}
+
+.reveal .livepoll-question .lp-leader-place {
+  font-weight: 800;
+  color: var(--lp-muted);
+  text-align: right;
+}
+
+.reveal .livepoll-question .lp-leader-row:first-child .lp-leader-place {
+  color: var(--lp-accent);
+}
+
+.reveal .livepoll-question .lp-leader-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+
+.reveal .livepoll-question .lp-leader-score {
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------- overlays */
+
+/* the restore offer: fixed, in px like the control panel */
+#livepoll-restore {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px 10px 16px;
+  border-radius: 10px;
+  background: #1c1c1c;
+  color: #eee;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  transform: translateX(-50%);
+}
+
+#livepoll-restore button {
+  padding: 6px 14px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: #333;
+  color: #eee;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#livepoll-restore button[data-act="restore"] {
+  border-color: #3b82f6;
+  background: #2563eb;
+  color: #fff;
+}
+
+/* a question from the audience, full screen */
+#livepoll-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  padding: 6vh 8vw;
+  background: color-mix(in srgb, var(--r-background-color, #fff) 95%, transparent);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+
+#livepoll-spotlight[hidden] {
+  display: none !important;
+}
+
+.livepoll-spotlight-card {
+  max-width: 70rem;
+  text-align: center;
+}
+
+.livepoll-spotlight-label {
+  margin-bottom: 2vh;
+  font-family: var(--r-heading-font, sans-serif);
+  font-size: 3vh;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--r-link-color, #2a76dd);
+}
+
+.livepoll-spotlight-text {
+  font-family: var(--r-main-font, sans-serif);
+  font-size: 5.5vh;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--r-main-color, #222);
+  overflow-wrap: anywhere;
+}
+
+/* reactions rise up the right-hand side */
+#livepoll-reactions {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.livepoll-reaction {
+  position: absolute;
+  bottom: -6vh;
+  font-size: 5vh;
+  line-height: 1;
+  animation: livepoll-rise 3s cubic-bezier(0.2, 0.6, 0.4, 1) forwards;
+}
+
+@keyframes livepoll-rise {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+    transform: translate(0, -10vh) scale(1);
+  }
+  100% {
+    transform: translate(var(--lp-drift, 0), -70vh) scale(1.1);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .livepoll-reaction {
+    animation: livepoll-fade 2.5s ease forwards;
+    bottom: 12vh;
+  }
+  @keyframes livepoll-fade {
+    0%, 100% { opacity: 0; }
+    20%, 70% { opacity: 1; }
+  }
+}
+
+/* ------------------------------------------------- the presenter's panel */
+
+#livepoll-panel .livepoll-row button,
+#livepoll-menu-slot .livepoll-row button {
+  margin-top: 6px;
+  padding: 5px 10px;
+}
+
+.livepoll-hud-box {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #252525;
+  line-height: 1.4;
+}
+
+.livepoll-hud-box .lp-hud-part {
+  padding: 3px 0;
+}
+
+.livepoll-hud-box .lp-hud-part + .lp-hud-part {
+  border-top: 1px solid #3a3a3a;
+}
+
+.livepoll-hud-box .lp-hud-title {
+  font-weight: 700;
+}
+
+.livepoll-hud-box .lp-hud-muted,
+.livepoll-hud-box .lp-hud-idle {
+  color: #999;
+}
+
+.livepoll-hud-box .lp-hud-alert,
+#livepoll-menu-slot .livepoll-alert,
+#livepoll-panel .livepoll-alert {
+  color: #ff8a7a;
+  font-weight: 700;
+}
+
+.livepoll-hud-box .lp-hud-big {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.livepoll-hud-box ol {
+  margin: 2px 0 0 18px;
+  padding: 0;
+}
+
+.livepoll-qa-item,
+.livepoll-quiz-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.livepoll-qa-item[data-status="pending"] {
+  border-left: 3px solid #f0b429;
+  padding-left: 6px;
+}
+
+.livepoll-qa-item[data-status="answered"] {
+  opacity: 0.55;
+}
+
+.livepoll-qa-votes {
+  min-width: 2.6em;
+  color: #9ecbff;
+  font-weight: 700;
+}
+
+.livepoll-qa-text {
+  flex: 1 1 60%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.livepoll-qa-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+#livepoll-panel .livepoll-qa-actions button,
+#livepoll-menu-slot .livepoll-qa-actions button,
+#livepoll-panel .livepoll-quiz-item button,
+#livepoll-menu-slot .livepoll-quiz-item button {
+  margin: 0;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.livepoll-quiz-nick {
+  flex: 1;
+}
+
+.livepoll-quiz-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

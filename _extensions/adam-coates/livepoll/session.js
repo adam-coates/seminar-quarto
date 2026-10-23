@@ -114,8 +114,15 @@ const initSession = function (Reveal) {
     const poll = polls[content.poll];
     if (!poll) return;
 
+    // Only what the host said (or this page replayed): a participant's message
+    // could otherwise write numbers into the record.
+    if (event.type === "received" && window.Livepoll && !Livepoll.trusted(event)) return;
+
     if (content.type === "results" && content.votes) {
       poll.votes = Object.assign({}, content.votes);
+      // earlier rounds, for a poll asked more than once
+      poll.history = Array.isArray(content.history) ? content.history : [];
+      if (content.voters !== undefined) poll.voters = content.voters;
     } else if (content.type === "voters") {
       poll.voters = content.voters;
     }
@@ -158,6 +165,7 @@ const initSession = function (Reveal) {
 
     const cloud = clouds[content.cloud];
     if (!cloud) return;
+    if (event.type === "received" && window.Livepoll && !Livepoll.trusted(event)) return;
 
     if (content.type === "counts" && content.counts) {
       cloud.counts = Object.assign({}, content.counts);
@@ -196,6 +204,7 @@ const initSession = function (Reveal) {
   function onLikertMessage(event) {
     const content = event && event.content;
     if (!content || content.sender !== "likert-plugin" || content.type !== "counts") return;
+    if (event.type === "received" && window.Livepoll && !Livepoll.trusted(event)) return;
     const likert = likerts[content.likert];
     if (!likert || !Array.isArray(content.counts)) return;
     likert.counts = content.counts.map(function (row) {
@@ -206,6 +215,86 @@ const initSession = function (Reveal) {
 
   document.addEventListener("broadcast", onLikertMessage);
   document.addEventListener("received", onLikertMessage);
+
+  // --------------------------------------------------- responses, signals
+
+  // Every response the host accepted, with when it came (livepoll.js
+  // dispatches them): what the CSV is, and where response times come from.
+  // Kept through a crash with the rest of the autosave.
+  let responses = [];
+  // "You've lost me" / "Slow down" presses and reactions, with their slide.
+  let signals = [];
+  let reactions = [];
+  let started = null;
+
+  document.addEventListener("livepoll-response", function (event) {
+    if (!started) started = Date.now();
+    responses.push(event.detail);
+  });
+  document.addEventListener("livepoll-signal", function (event) {
+    signals.push(event.detail);
+    if (window.Livepoll) Livepoll.dirty();
+  });
+  document.addEventListener("livepoll-reaction", function (event) {
+    reactions.push(event.detail);
+    if (window.Livepoll) Livepoll.dirty();
+  });
+
+  if (window.Livepoll) {
+    Livepoll.persist("session", {
+      save: function () {
+        return { responses: responses, signals: signals, reactions: reactions, started: started };
+      },
+      restore: function (data) {
+        responses = data.responses || [];
+        signals = data.signals || [];
+        reactions = data.reactions || [];
+        started = data.started || null;
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------- ids
+
+  // What session.json says about who gave a response, by `livepoll: ids:`
+  //
+  //   session     p1, p2, ... in order of first response: one person's answers
+  //               can be followed through this class, not linked to another
+  //   persistent  a hash of the browser's random id, salted with the venue:
+  //               the same browser gets the same id in every class of the
+  //               course, for following people across sessions
+  //   none        no ids at all; aggregates and times only
+  function pseudonymiser() {
+    const policy = ((window.Livepoll && Livepoll.config().ids) || "session").toLowerCase();
+    if (policy === "none") return function () { return undefined; };
+    if (policy === "persistent") {
+      const salt = ((window.Livepoll && Livepoll.config().url) || "") + ":";
+      return function (who) {
+        return who ? "x" + fnv64(salt + who) : undefined;
+      };
+    }
+    const seen = {};
+    let n = 0;
+    return function (who) {
+      if (!who) return undefined;
+      if (!seen[who]) seen[who] = "p" + ++n;
+      return seen[who];
+    };
+  }
+
+  // Two 32-bit FNV-1a passes, differently seeded: 16 hex digits. Not a secret
+  // keeper — the ids it hashes are random to begin with — just stable.
+  function fnv64(text) {
+    function pass(seed) {
+      let h = seed >>> 0;
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      return ("00000000" + h.toString(16)).slice(-8);
+    }
+    return pass(2166136261) + pass(0x811c9dc5 ^ 0x5bd1e995);
+  }
 
   // ----------------------------------------------------------- drawings
 
@@ -368,6 +457,8 @@ const initSession = function (Reveal) {
     readPollDefinitions();
     readCloudDefinitions();
     readLikertDefinitions();
+    // the deck's livepoll block, not this plugin's own settings
+    const config = deckConfig() || {};
 
     // counts[statement][point], in the deck's order; an unanswered scale is
     // left out like an unopened poll
@@ -421,7 +512,8 @@ const initSession = function (Reveal) {
       // zeroes — it usually means the poll was never opened.
       if (total === 0) return;
 
-      recorded.push({
+      const declared = (config && config.polls && config.polls[id]) || {};
+      const entry = {
         id: id,
         slide: poll.slide,
         question: poll.question,
@@ -429,28 +521,173 @@ const initSession = function (Reveal) {
         options: poll.options.map(function (option) {
           return {
             label: option.label,
+            // what `responses` give as the value: A, B, ... or value="…"
+            value: option.value,
             correct: option.correct,
             votes: poll.votes[option.value] || 0,
           };
         }),
-      });
+      };
+      if (declared.maxChoices !== undefined && declared.maxChoices !== null) entry.multiple = true;
+      // Asked more than once (peer instruction): every round, the last one
+      // being the options above.
+      if (poll.history && poll.history.length) {
+        entry.rounds = poll.history
+          .concat([{ votes: poll.votes, voters: poll.voters }])
+          .map(function (round, i) {
+            return {
+              round: i + 1,
+              voters: round.voters || 0,
+              options: poll.options.map(function (option) {
+                return { label: option.label, votes: (round.votes || {})[option.value] || 0 };
+              }),
+            };
+          });
+      }
+      recorded.push(entry);
     });
 
-    return {
+    // estimates, rankings, hotspots: the raw answers, which livepoll.lua
+    // re-tallies on replay
+    const kinds = window.Livepoll ? Livepoll.kinds : {};
+    function rawAnswers(kind, table, extra) {
+      const out = [];
+      const declared = (config && config[table]) || {};
+      if (!kinds[kind]) return out;
+      Object.keys(declared).forEach(function (id) {
+        const answers = kinds[kind].answers(id);
+        if (!answers.length) return;
+        const el = document.querySelector(".lp-" + kind + '[data-' + kind + '="' + cssEscape(id) + '"]');
+        out.push(Object.assign({ id: id, slide: el ? slideIdOf(el) : null, question: declared[id].question }, extra(declared[id]), { answers: answers }));
+      });
+      return out;
+    }
+
+    const pseudonym = pseudonymiser();
+    const opened = {};
+    responses.forEach(function (r) {
+      if (window.Livepoll && Livepoll.openedAt(r.id)) opened[r.id] = new Date(Livepoll.openedAt(r.id)).toISOString();
+    });
+
+    const session = {
       version: 1,
       deck: window.location.pathname.replace(/\/index\.html$|\/$/, "").split("/").pop() || null,
       recorded: new Date().toISOString(),
+      started: started ? new Date(started).toISOString() : null,
       // Which exporter wrote this. Reveal plugins are served from site_libs at a
       // stable URL with no cache-busting, so a browser that has had the deck open
       // since before a rebuild will keep running the old script and quietly
       // export a file missing whatever was added since. Stamping the version
       // turns that into something the reading end can name.
-      generator: "session.js/1.2",
+      generator: "session.js/2.0",
+      ids: (config && config.ids) || "session",
       polls: recorded,
       clouds: recordedClouds,
       likerts: recordedLikerts,
+      estimates: rawAnswers("estimate", "estimates", function (d) {
+        return { answer: d.answer, unit: d.unit, min: d.min, max: d.max };
+      }),
+      ranks: rawAnswers("rank", "ranks", function (d) {
+        return { items: d.items, top: d.top };
+      }),
+      hotspots: rawAnswers("hotspot", "hotspots", function (d) {
+        return { image: d.image, answer: d.answer };
+      }),
+      questions: window.Livepoll && Livepoll.questions
+        ? Livepoll.questions().map(function (q) {
+            return { text: q.text, votes: q.votes, status: q.status, asked: new Date(q.t).toISOString(), by: pseudonym(q.who) };
+          })
+        : [],
+      leaderboard: window.Livepoll && Livepoll.leaderboard
+        ? Livepoll.leaderboard().map(function (p) {
+            return { nickname: p.nick, score: p.score, right: p.right, player: pseudonym(p.who) };
+          })
+        : [],
+      // when each question was first opened, for response times
+      opened: opened,
+      // every accepted response, in order
+      responses: responses.map(function (r) {
+        const row = { t: new Date(r.t).toISOString(), kind: r.kind, id: r.id, value: r.value };
+        if (r.round && r.round > 1) row.round = r.round;
+        const who = pseudonym(r.who);
+        if (who) row.participant = who;
+        return row;
+      }),
+      signals: signals.map(function (s) {
+        return { t: new Date(s.t).toISOString(), kind: s.kind, on: s.on, slide: s.slide };
+      }),
+      reactions: reactions.map(function (r) {
+        return { t: new Date(r.t).toISOString(), emoji: r.emoji, slide: r.slide };
+      }),
       drawings: await renderDrawings(),
     };
+    return session;
+  }
+
+  // One row per response, for R, Python or a spreadsheet: the long format,
+  // so `read.csv()` and a group-by is all an analysis needs.
+  function csvCell(value) {
+    if (value === null || value === undefined) return "";
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    return /[",\n\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  }
+
+  function buildCsv() {
+    const config = deckConfig() || {};
+    const tables = ["polls", "clouds", "likerts", "estimates", "ranks", "hotspots"];
+    function questionText(id) {
+      for (const t of tables) if (config[t] && config[t][id]) return config[t][id].question;
+      return "";
+    }
+    // a poll's value as its labels, which read better than A/B/C
+    function label(r) {
+      const poll = config.polls && config.polls[r.id];
+      if (r.kind !== "poll" || !poll) return r.value;
+      const name = function (v) {
+        const o = poll.options.find(function (opt) { return opt.value === v; });
+        return o ? o.label : v;
+      };
+      return Array.isArray(r.value) ? r.value.map(name).join(" | ") : name(r.value);
+    }
+    const pseudonym = pseudonymiser();
+    const header = ["time", "seconds_since_open", "kind", "question_id", "question", "round", "participant", "value", "label"];
+    const rows = [header.join(",")];
+    responses.forEach(function (r) {
+      const opened = window.Livepoll ? Livepoll.openedAt(r.id) : null;
+      rows.push(
+        [
+          new Date(r.t).toISOString(),
+          opened ? ((r.t - opened) / 1000).toFixed(1) : "",
+          r.kind,
+          r.id,
+          questionText(r.id),
+          r.round || 1,
+          pseudonym(r.who) || "",
+          r.value,
+          label(r),
+        ].map(csvCell).join(",")
+      );
+    });
+    return rows.join("\n") + "\n";
+  }
+
+  function download(text, name, type) {
+    const url = URL.createObjectURL(new Blob([text], { type: type }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCsv() {
+    if (!responses.length) {
+      window.alert("No responses recorded yet.");
+      return;
+    }
+    download(buildCsv(), filename.replace(/\.json$/i, "") + ".csv", "text/csv");
   }
 
   async function exportSession() {
@@ -463,16 +700,8 @@ const initSession = function (Reveal) {
       return;
     }
 
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(session, null, 2)], { type: "application/json" })
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    download(JSON.stringify(session, null, 2), filename, "application/json");
+    if (window.Livepoll) Livepoll.markExported();
 
     console.log(
       "session: exported " +
@@ -511,7 +740,7 @@ const initSession = function (Reveal) {
 
   // Also reachable from the console, which is the honest way to check what a
   // class produced before trusting the file.
-  window.plateSession = { export: exportSession, build: buildSession };
+  window.plateSession = { export: exportSession, build: buildSession, exportCsv: exportCsv, csv: buildCsv };
 
   Reveal.addEventListener("ready", function () {
     readPollDefinitions();

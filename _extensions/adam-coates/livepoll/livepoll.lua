@@ -187,6 +187,39 @@ local function record_cloud(id, cloud)
   clouds[id] = cloud
 end
 
+-- timer="60" on any question: voting closes after that many seconds, counted
+-- from when the question is opened. on-timeout="reveal" (the default) then
+-- steps to the slide's next livepoll step — the answer, the results or the
+-- next round — and on-timeout="close" only closes.
+local timers = {} -- id -> { seconds, onTimeout }
+
+local function read_timer(el, id)
+  local t = el.attributes["timer"]
+  if t == nil then return nil end
+  local seconds = tonumber((t:gsub("%s*s$", "")))
+  if not seconds or seconds <= 0 then
+    quarto.log.warning("livepoll: '" .. id .. "' timer=\"" .. t .. "\" should be a number of seconds; ignored.")
+    return nil
+  end
+  local on_timeout = el.attributes["on-timeout"] or "reveal"
+  if on_timeout ~= "reveal" and on_timeout ~= "close" then
+    quarto.log.warning("livepoll: '" .. id .. "' on-timeout should be reveal or close; using reveal.")
+    on_timeout = "reveal"
+  end
+  timers[id] = { seconds = math.floor(seconds), onTimeout = on_timeout }
+  return timers[id]
+end
+
+-- The countdown ring, filled in by timer.js. `float` puts it in the corner of
+-- a classic slide; in the embedded layout it sits in the side column.
+local function timer_html(id, float)
+  if not timers[id] then return "" end
+  return '<div class="lp-timer' .. (float and " lp-timer-float" or "") .. '" data-timer="' .. html_escape(id)
+    .. '" hidden><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="lp-timer-track" cx="18" cy="18" r="15.9"/>'
+    .. '<circle class="lp-timer-ring" cx="18" cy="18" r="15.9" pathLength="100"/></svg>'
+    .. '<span class="lp-timer-text"></span></div>'
+end
+
 -- The div's own `layout=`, or nil to take the deck default at generate time.
 local function layout_attr(el, id)
   local v = el.attributes["layout"]
@@ -323,7 +356,24 @@ local function collect_div(el)
   local letters = truthy(el.attributes["letters"])
   if letters == nil then letters = not all_explicit end
 
-  local options, correct = {}, nil
+  -- Several choices: max-choices="N" takes up to N, multiple="true" any
+  -- number (0 below). Unset, one, as always.
+  local max_choices = nil
+  if el.attributes["max-choices"] then
+    max_choices = tonumber(el.attributes["max-choices"])
+    if not max_choices or max_choices < 1 then
+      quarto.log.warning("livepoll: poll '" .. id .. "' max-choices should be a number from 1; ignored.")
+      max_choices = nil
+    elseif max_choices == 1 then
+      max_choices = nil
+    end
+  elseif truthy(el.attributes["multiple"]) then
+    max_choices = 0
+  end
+
+  -- Every option marked [x] is correct. A one-choice poll with two marked
+  -- accepts either; a several-choice poll wants exactly the marked set.
+  local options, correct = {}, {}
   for i, opt in ipairs(raw_options) do
     local letter = LETTERS:sub(i, i)
     local value = opt.value or letter
@@ -331,10 +381,26 @@ local function collect_div(el)
     if letters and not opt.value then label = letter .. ". " .. label end
     -- `text` is the option without its letter, which the panel layout shows
     table.insert(options, { value = value, label = label, text = opt.label })
-    if opt.correct then correct = value end
+    if opt.correct then table.insert(correct, value) end
   end
 
-  if el.attributes["correct"] then correct = el.attributes["correct"] end
+  if el.attributes["correct"] then
+    correct = {}
+    for v in el.attributes["correct"]:gmatch("[^,|]+") do table.insert(correct, trim(v)) end
+  end
+  if #correct == 0 then
+    correct = nil
+  elseif #correct == 1 then
+    correct = correct[1]
+  end
+
+  local rounds = tonumber(el.attributes["rounds"] or "1") or 1
+  if rounds < 1 then rounds = 1 end
+  if rounds > 5 then
+    quarto.log.warning("livepoll: poll '" .. id .. "' rounds=\"" .. rounds .. "\": at most 5; using 5.")
+    rounds = 5
+  end
+  read_timer(el, id)
 
   -- The question is drawn above the buttons unless it is already on the slide
   -- as a heading, or the author switched it off.
@@ -357,8 +423,27 @@ local function collect_div(el)
     letters = truthy(el.attributes["letters"]),
     results = results or "live",
     qr = truthy(el.attributes["qr"]) ~= false,
+    max_choices = max_choices,
+    rounds = rounds,
   })
   return nil
+end
+
+-- The correct answer as the slides and the phones carry it: one value as
+-- itself, several as a JSON list (livepoll.js, LP.correctSet).
+local function correct_attr(correct)
+  if type(correct) == "table" then return quarto.json.encode(correct) end
+  return correct
+end
+
+local function is_correct(correct, value)
+  if type(correct) == "table" then
+    for _, v in ipairs(correct) do
+      if v == value then return true end
+    end
+    return false
+  end
+  return correct == value
 end
 
 local function collect_cloud(el)
@@ -383,6 +468,7 @@ local function collect_cloud(el)
 
   local max_words = tonumber(el.attributes["max-words"] or "3") or 3
   if max_words < 1 then max_words = 1 end
+  read_timer(el, id)
 
   record_cloud(id, {
     question = question or last_header or id,
@@ -502,6 +588,7 @@ local function collect_likert(el)
   if single then statements = { question } end
 
   local labels, numeric, anchors = likert_scale(el.attributes, id)
+  read_timer(el, id)
 
   local show = truthy(el.attributes["show-question"])
   -- as for polls: printed unless the slide heading already says it (a single
@@ -532,6 +619,221 @@ local function collect_likert(el)
     return el
   end
   return nil
+end
+
+------------------------------------------------- estimate, rank, hotspot
+
+-- Three more kinds of question, all drawn in the embedded layout (livepoll.js
+-- has nothing to put on a classic voting slide for them: the answering is on
+-- the phones). A `.poll-results for=` div draws one on another slide.
+--
+--     ::: {.estimate #mean min="0" max="100" answer="42" unit="%"}
+--     What share of the class owns a bicycle?
+--     :::
+--
+--     ::: {.rank #topics top="3"}
+--     Which topics should we revisit?
+--     - Regression
+--     - Power
+--     :::
+--
+--     ::: {.hotspot #outlier answer="0.71,0.32,0.06"}
+--     Tap the outlier.
+--
+--     ![](scatter.png)
+--     :::
+
+local estimates, estimate_order = {}, {}
+local ranks, rank_order = {}, {}
+local hotspots, hotspot_order = {}, {}
+local qa_boards = 0       -- how many .qa slides; Q&A runs whether or not there is one
+local leaderboards = 0
+
+local function record_in(tbl, order, id, item)
+  if not tbl[id] then table.insert(order, id) end
+  tbl[id] = item
+end
+
+-- The question for any of these: question=, else the first paragraph with
+-- text in it, else the slide heading. Returns the text and whether it still
+-- needs printing on the slide (it does unless it is the heading).
+local function question_of(el, id)
+  local question = el.attributes["question"]
+  local from_heading = false
+  if not question then
+    for _, block in ipairs(el.content) do
+      if (block.t == "Para" or block.t == "Plain" or block.t == "Header") and not question then
+        local only_images = true
+        for _, inl in ipairs(block.content) do
+          if inl.t ~= "Image" and inl.t ~= "Space" and inl.t ~= "SoftBreak" then only_images = false end
+        end
+        if not only_images then
+          local text = {}
+          for _, inl in ipairs(block.content) do
+            if inl.t ~= "Image" then text[#text + 1] = inl end
+          end
+          question = inlines_text(text)
+        end
+      end
+    end
+  end
+  if not question or question == "" then
+    question = last_header or id
+    from_heading = true
+  end
+  local show = truthy(el.attributes["show-question"])
+  if show == nil then show = not from_heading end
+  return question, show
+end
+
+local function results_attr(el, id)
+  local results = el.attributes["results"]
+  if results ~= nil and results ~= "live" and results ~= "hidden" then
+    quarto.log.warning("livepoll: '" .. id .. "' results should be live or hidden, got '" .. results .. "'.")
+    results = nil
+  end
+  return results or "live"
+end
+
+-- Ids for these are settled in pass 1 (as for rating scales), so the div is
+-- handed back with its id filled in when it had none.
+local function settle_id(el, prefix)
+  collect_seq = collect_seq + 1
+  local id = el.identifier
+  if id == nil or id == "" then id = prefix .. "-" .. collect_seq end
+  return id
+end
+
+local function settled(el, id)
+  if el.identifier == "" then
+    el.identifier = id
+    return el
+  end
+  return nil
+end
+
+local function warn_layout(el, id)
+  if el.attributes["layout"] and LAYOUTS[el.attributes["layout"]] == "classic" then
+    quarto.log.warning("livepoll: '" .. id .. "' is only drawn in the embedded layout; layout=\"classic\" ignored.")
+  end
+end
+
+local function collect_estimate(el)
+  if not el.classes:includes("estimate") then return nil end
+  local id = settle_id(el, "estimate")
+  local question, show = question_of(el, id)
+  local a = el.attributes
+  local min, max = tonumber(a.min), tonumber(a.max)
+  if min and max and min >= max then
+    quarto.log.warning("livepoll: estimate '" .. id .. "' has min >= max; both ignored.")
+    min, max = nil, nil
+  end
+  local answer = tonumber(a.answer)
+  if a.answer and not answer then
+    quarto.log.warning("livepoll: estimate '" .. id .. "' answer=\"" .. a.answer .. "\" is not a number; ignored.")
+  end
+  -- tolerance="5" (either side) or "10%" (of the answer): what counts as right
+  -- in a quiz. Without one an estimate is not scored.
+  local tolerance, tolerance_pct = nil, nil
+  if a.tolerance then
+    local pct = a.tolerance:match("^%s*([%d.]+)%s*%%%s*$")
+    if pct then tolerance_pct = tonumber(pct) else tolerance = tonumber(a.tolerance) end
+  end
+  warn_layout(el, id)
+  read_timer(el, id)
+  record_in(estimates, estimate_order, id, {
+    question = question,
+    show_question = show,
+    min = min,
+    max = max,
+    step = tonumber(a.step),
+    answer = answer,
+    unit = a.unit,
+    tolerance = tolerance,
+    tolerancePct = tolerance_pct,
+    bins = tonumber(a.bins),
+    results = results_attr(el, id),
+    qr = truthy(a.qr) ~= false,
+  })
+  return settled(el, id)
+end
+
+local function collect_rank(el)
+  if not el.classes:includes("rank") then return nil end
+  local id = settle_id(el, "rank")
+  local question, show = question_of(el, id)
+  local items = {}
+  for _, block in ipairs(el.content) do
+    if block.t == "BulletList" or block.t == "OrderedList" then
+      for _, item in ipairs(block.content) do
+        local first = item[1]
+        local text = first and first.content and inlines_text(first.content) or ""
+        if text ~= "" then table.insert(items, text) end
+      end
+    end
+  end
+  if #items < 2 then
+    quarto.log.warning("livepoll: rank '" .. id .. "' needs at least two items in a list; skipping.")
+    return nil
+  end
+  local top = tonumber(el.attributes["top"] or "") or #items
+  if top < 1 or top > #items then top = #items end
+  warn_layout(el, id)
+  read_timer(el, id)
+  record_in(ranks, rank_order, id, {
+    question = question,
+    show_question = show,
+    items = items,
+    top = top,
+    results = results_attr(el, id),
+    qr = truthy(el.attributes["qr"]) ~= false,
+  })
+  return settled(el, id)
+end
+
+local function first_image(el)
+  local found = nil
+  pandoc.Div(el.content):walk({
+    Image = function(img)
+      if not found then found = { src = img.src, alt = pandoc.utils.stringify(img.caption) } end
+      return nil
+    end,
+  })
+  return found
+end
+
+local function collect_hotspot(el)
+  if not el.classes:includes("hotspot") then return nil end
+  local id = settle_id(el, "hotspot")
+  local image = first_image(el)
+  if not image then
+    quarto.log.warning("livepoll: hotspot '" .. id .. "' has no image in it; skipping.")
+    return nil
+  end
+  local question, show = question_of(el, id)
+  -- answer="x,y,r": the centre as fractions of the image's width and height,
+  -- the radius as a fraction of its width
+  local answer = nil
+  if el.attributes["answer"] then
+    local x, y, r = el.attributes["answer"]:match("^%s*([%d.]+)%s*,%s*([%d.]+)%s*,%s*([%d.]+)%s*$")
+    if x then
+      answer = { tonumber(x), tonumber(y), tonumber(r) }
+    else
+      quarto.log.warning("livepoll: hotspot '" .. id .. "' answer should be \"x,y,radius\" as fractions (e.g. 0.6,0.4,0.05); ignored.")
+    end
+  end
+  warn_layout(el, id)
+  read_timer(el, id)
+  record_in(hotspots, hotspot_order, id, {
+    question = question,
+    show_question = show,
+    image = image.src,
+    alt = image.alt,
+    answer = answer,
+    results = results_attr(el, id),
+    qr = truthy(el.attributes["qr"]) ~= false,
+  })
+  return settled(el, id)
 end
 
 -- The diverging palette's tone for each point: which side of neutral, and how
@@ -586,10 +888,32 @@ local function question_html(id, text)
     .. "</h3>"
 end
 
+-- "Pick up to 2" / "Pick any": said on the slide and on the phones.
+local function choices_hint(poll)
+  if poll.max_choices == nil then return nil end
+  if poll.max_choices == 0 then return "Pick all that apply" end
+  return "Pick up to " .. poll.max_choices
+end
+
+-- One step per round after the first. The presenter steps to it after the
+-- discussion and everyone votes again (livepoll.js starts the round).
+local function round_steps(id, poll, hidden)
+  local out = {}
+  for r = 2, poll.rounds or 1 do
+    out[#out + 1] = '<p class="lp-round fragment' .. (hidden and " lp-step" or " lp-round-note")
+      .. '" data-poll="' .. html_escape(id) .. '" data-round="' .. r .. '">Round ' .. r
+      .. ": discuss with your neighbour, then vote again</p>"
+  end
+  return table.concat(out, "\n")
+end
+
 local function poll_html(id)
   local poll = polls[id]
   local out = {}
+  out[#out + 1] = timer_html(id, true)
   if poll.show_question then out[#out + 1] = question_html(id) end
+  local hint = choices_hint(poll)
+  if hint then out[#out + 1] = '<p class="poll-hint">' .. hint .. "</p>" end
   out[#out + 1] = '<div class="poll" data-poll="' .. html_escape(id) .. '">'
   for _, opt in ipairs(poll.options) do
     out[#out + 1] = '<button data-value="'
@@ -599,10 +923,25 @@ local function poll_html(id)
       .. "</button>"
   end
   out[#out + 1] = "</div>"
+  -- outside the .poll: poll.js takes every button inside one for an option
+  if hint then
+    out[#out + 1] = '<button type="button" class="poll-submit" data-poll="' .. html_escape(id) .. '" disabled>Submit</button>'
+  end
   out[#out + 1] = '<p class="poll-voters">Responses: <span class="voters" data-poll="'
     .. html_escape(id)
     .. '">0</span></p>'
+  out[#out + 1] = round_steps(id, poll, false)
   return table.concat(out, "\n")
+end
+
+-- "Correct answer: X", or "Correct answers: X, Y".
+local function answer_text(poll, label_of)
+  local labels = {}
+  for _, opt in ipairs(poll.options) do
+    if is_correct(poll.correct, opt.value) then labels[#labels + 1] = label_of(opt) end
+  end
+  if #labels == 0 then return nil end
+  return (#labels > 1 and "Correct answers: " or "Correct answer: "), labels
 end
 
 ------------------------------------------------------------ chart styling
@@ -779,21 +1118,20 @@ local function results_html(id, orientation, height, show_question, st)
     .. '">0</span></p>'
 
   if poll.correct then
-    local label = nil
-    for _, opt in ipairs(poll.options) do
-      if opt.value == poll.correct then label = opt.label end
-    end
-    if label then
+    local prefix, labels = answer_text(poll, function(opt) return opt.label end)
+    if labels then
+      local strong = {}
+      for i, l in ipairs(labels) do strong[i] = "<strong>" .. html_escape(l) .. "</strong>" end
       out[#out + 1] = '<p class="poll-answer fragment" data-poll="'
         .. html_escape(id)
         .. '" data-correct="'
-        .. html_escape(poll.correct)
-        .. '">Correct answer: <strong>'
-        .. html_escape(label)
-        .. "</strong></p>"
+        .. html_escape(correct_attr(poll.correct))
+        .. '">' .. prefix
+        .. table.concat(strong, ", ")
+        .. "</p>"
     else
       quarto.log.warning(
-        "livepoll: poll '" .. id .. "' marks '" .. poll.correct .. "' correct, but no option has that value."
+        "livepoll: poll '" .. id .. "' marks '" .. correct_attr(poll.correct) .. "' correct, but no option has that value."
       )
     end
   end
@@ -803,7 +1141,7 @@ end
 
 local function cloud_html(id, height)
   local cloud = clouds[id]
-  local out = {}
+  local out = { timer_html(id, true) }
   if cloud.show_question then out[#out + 1] = question_html(id, cloud.question) end
   out[#out + 1] = '<div class="wordcloud" data-wordcloud="'
     .. html_escape(id)
@@ -838,12 +1176,13 @@ end
 -- livepoll.js, because the URL depends on where the deck is served from.
 -- `count` is the counter span, which carries the class the plugins already keep
 -- in step (`.voters` for polls, `.word-count` for clouds).
-local function panel_side_html(show_qr, count, label)
+local function panel_side_html(show_qr, count, label, id)
   local out = { '<div class="lp-side">' }
   if show_qr then
     out[#out + 1] = '<div class="lp-qr"></div>'
     out[#out + 1] = '<div class="lp-url"></div>'
   end
+  if id then out[#out + 1] = timer_html(id, false) end
   out[#out + 1] = '<div class="lp-count">' .. count
     .. '<span class="lp-count-label">' .. label .. "</span></div>"
   -- LIVE / CLOSED / OFFLINE and the room size, kept in step by livepoll.js
@@ -862,10 +1201,17 @@ local function panel_poll_html(id)
   local eid = html_escape(id)
   local out = {
     '<div class="livepoll-question lp-poll" data-poll="' .. eid
-      .. '" data-results="' .. poll.results .. '">',
+      .. '" data-results="' .. poll.results .. '"'
+      .. (poll.max_choices ~= nil and ' data-multi="true"' or "") .. ">",
     '<div class="lp-main">',
   }
   if poll.show_question then out[#out + 1] = question_html(id) end
+  local hint = choices_hint(poll)
+  if hint or (poll.rounds or 1) > 1 then
+    out[#out + 1] = '<div class="lp-subhead">'
+      .. (hint and ('<span class="lp-hint">' .. hint .. "</span>") or "")
+      .. '<span class="lp-round-badge"></span></div>'
+  end
   out[#out + 1] = '<div class="poll lp-bars" data-poll="' .. eid .. '">'
   for _, opt in ipairs(poll.options) do
     local label = html_escape(option_label(poll, opt))
@@ -882,27 +1228,29 @@ local function panel_poll_html(id)
   out[#out + 1] = panel_side_html(
     poll.qr,
     '<span class="voters lp-count-n" data-poll="' .. eid .. '">0</span>',
-    "responses"
+    "responses",
+    id
   )
+
+  -- the rounds come before the answer: vote, discuss, vote again, then hear it
+  out[#out + 1] = round_steps(id, poll, true)
 
   -- The answer is the same `.poll-answer` fragment the classic results slide
   -- uses, so the reveal, the late-joiner relay and the phones all work as
   -- before. Here it is only a step: the row turning green is the visible part.
-  local answer = nil
+  local prefix, answers = nil, nil
   if poll.correct then
-    for _, opt in ipairs(poll.options) do
-      if opt.value == poll.correct then answer = option_label(poll, opt) end
-    end
-    if not answer then
+    prefix, answers = answer_text(poll, function(opt) return option_label(poll, opt) end)
+    if not answers then
       quarto.log.warning(
-        "livepoll: poll '" .. id .. "' marks '" .. poll.correct .. "' correct, but no option has that value."
+        "livepoll: poll '" .. id .. "' marks '" .. correct_attr(poll.correct) .. "' correct, but no option has that value."
       )
     end
   end
-  if answer then
+  if answers then
     out[#out + 1] = '<p class="poll-answer fragment lp-step" data-poll="' .. eid
-      .. '" data-correct="' .. html_escape(poll.correct) .. '">Correct answer: '
-      .. html_escape(answer) .. "</p>"
+      .. '" data-correct="' .. html_escape(correct_attr(poll.correct)) .. '">' .. prefix
+      .. html_escape(table.concat(answers, ", ")) .. "</p>"
   elseif poll.results == "hidden" then
     -- nothing to reveal but the results themselves
     out[#out + 1] = '<p class="lp-reveal fragment lp-step" data-poll="' .. eid .. '">Results</p>'
@@ -927,7 +1275,8 @@ local function panel_cloud_html(id)
   out[#out + 1] = panel_side_html(
     cloud.qr,
     '<span class="word-count lp-count-n" data-wordcloud="' .. eid .. '">0</span>',
-    "words"
+    "words",
+    id
   )
   out[#out + 1] = "</div>"
   return table.concat(out, "\n")
@@ -942,7 +1291,7 @@ end
 local function likert_html(id)
   local likert = likerts[id]
   local eid = html_escape(id)
-  local out = {}
+  local out = { timer_html(id, true) }
   if likert.show_question then out[#out + 1] = question_html(id, likert.question) end
   out[#out + 1] = '<div class="likert lp-likert-classic' .. (likert.numeric and " likert-numeric" or "")
     .. '" data-likert="' .. eid .. '" style="--lp-points:' .. #likert.labels .. '">'
@@ -1133,7 +1482,8 @@ local function panel_likert_html(id)
   out[#out + 1] = panel_side_html(
     likert.qr,
     '<span class="likert-voters lp-count-n" data-likert="' .. eid .. '">0</span>',
-    "responses"
+    "responses",
+    id
   )
   if likert.results == "hidden" then
     out[#out + 1] = '<p class="lp-reveal fragment lp-step" data-likert="' .. eid .. '">Results</p>'
@@ -1142,7 +1492,169 @@ local function panel_likert_html(id)
   return table.concat(out, "\n")
 end
 
+------------------------------------------- estimate, rank, hotspot markup
+
+-- The answer step for the kinds that have one: the same `.poll-answer`
+-- fragment polls use, so revealing it, telling late joiners and scoring all
+-- work the one way. `results="hidden"` without an answer gets the results step.
+local function answer_step(id, item, correct, text)
+  local eid = html_escape(id)
+  if correct ~= nil then
+    return '<p class="poll-answer fragment lp-step" data-poll="' .. eid .. '" data-correct="'
+      .. html_escape(correct) .. '">' .. html_escape(text) .. "</p>"
+  elseif item.results == "hidden" then
+    return '<p class="lp-reveal fragment lp-step" data-poll="' .. eid .. '">Results</p>'
+  end
+  return ""
+end
+
+local function number_text(n)
+  if n == nil then return nil end
+  if n == math.floor(n) then return string.format("%d", n) end
+  return tostring(n)
+end
+
+-- `side`: false for a .poll-results slide, which has no QR column.
+local function estimate_html(id, side)
+  local e = estimates[id]
+  local eid = html_escape(id)
+  local out = {
+    '<div class="livepoll-question lp-estimate-q' .. (side and "" or " lp-noside") .. '" data-estimate="' .. eid
+      .. '" data-results="' .. e.results .. '">',
+    '<div class="lp-main">',
+  }
+  if e.show_question or not side then out[#out + 1] = question_html(id, e.question) end
+  out[#out + 1] = '<div class="lp-estimate" data-estimate="' .. eid .. '">'
+  out[#out + 1] = '<div class="lp-est-plot"><div class="lp-est-bars"></div>'
+    .. '<div class="lp-est-line lp-est-median" hidden><span></span></div>'
+    .. '<div class="lp-est-line lp-est-answer" hidden><span></span></div></div>'
+  out[#out + 1] = '<div class="lp-est-axis"></div>'
+  out[#out + 1] = '<div class="lp-est-summary"></div>'
+  out[#out + 1] = '<p class="lp-empty">Waiting for answers…</p>'
+  out[#out + 1] = "</div>"
+  out[#out + 1] = '<div class="lp-veil">Results hidden</div>'
+  out[#out + 1] = "</div>"
+  if side then
+    out[#out + 1] = panel_side_html(e.qr,
+      '<span class="estimate-voters lp-count-n" data-estimate="' .. eid .. '">0</span>', "answers", id)
+  end
+  local text = e.answer and ("Answer: " .. number_text(e.answer) .. (e.unit and (" " .. e.unit) or "")) or nil
+  out[#out + 1] = answer_step(id, e, e.answer and number_text(e.answer) or nil, text)
+  out[#out + 1] = "</div>"
+  return table.concat(out, "\n")
+end
+
+local function rank_html(id, side)
+  local r = ranks[id]
+  local eid = html_escape(id)
+  local out = {
+    '<div class="livepoll-question lp-rank-q' .. (side and "" or " lp-noside") .. '" data-rank="' .. eid
+      .. '" data-results="' .. r.results .. '">',
+    '<div class="lp-main">',
+  }
+  if r.show_question or not side then out[#out + 1] = question_html(id, r.question) end
+  if r.top < #r.items then
+    out[#out + 1] = '<div class="lp-subhead"><span class="lp-hint">Top ' .. r.top .. " of " .. #r.items .. "</span></div>"
+  end
+  out[#out + 1] = '<div class="lp-rank" data-rank="' .. eid .. '" style="--lp-items:' .. #r.items .. '">'
+  for i, item in ipairs(r.items) do
+    out[#out + 1] = '<div class="lp-rank-row" data-item="' .. (i - 1) .. '" style="--lp-place:' .. (i - 1) .. '">'
+      .. '<span class="lp-rank-pos"></span>'
+      .. '<span class="lp-rank-label">' .. html_escape(item) .. "</span>"
+      .. '<span class="lp-track"><span class="lp-fill"></span></span>'
+      .. '<span class="lp-rank-stat"></span></div>'
+  end
+  out[#out + 1] = "</div>"
+  out[#out + 1] = '<div class="lp-veil">Results hidden</div>'
+  out[#out + 1] = "</div>"
+  if side then
+    out[#out + 1] = panel_side_html(r.qr,
+      '<span class="rank-voters lp-count-n" data-rank="' .. eid .. '">0</span>', "responses", id)
+  end
+  out[#out + 1] = answer_step(id, r, nil, nil)
+  out[#out + 1] = "</div>"
+  return table.concat(out, "\n")
+end
+
+local function hotspot_html(id, side)
+  local h = hotspots[id]
+  local eid = html_escape(id)
+  local out = {
+    '<div class="livepoll-question lp-hotspot-q' .. (side and "" or " lp-noside") .. '" data-hotspot="' .. eid
+      .. '" data-results="' .. h.results .. '">',
+    '<div class="lp-main">',
+  }
+  if h.show_question or not side then out[#out + 1] = question_html(id, h.question) end
+  out[#out + 1] = '<div class="lp-hotspot" data-hotspot="' .. eid .. '"><div class="lp-hot-frame">'
+    .. '<img class="lp-hot-img" src="' .. html_escape(h.image) .. '" alt="' .. html_escape(h.alt or "") .. '">'
+    .. '<canvas class="lp-hot-heat"></canvas><svg class="lp-hot-marks" preserveAspectRatio="none"></svg>'
+    .. "</div></div>"
+  out[#out + 1] = '<div class="lp-veil">Results hidden</div>'
+  out[#out + 1] = "</div>"
+  if side then
+    out[#out + 1] = panel_side_html(h.qr,
+      '<span class="hotspot-voters lp-count-n" data-hotspot="' .. eid .. '">0</span>', "taps", id)
+  end
+  local correct = nil
+  if h.answer then correct = table.concat({ h.answer[1], h.answer[2], h.answer[3] }, ",") end
+  out[#out + 1] = answer_step(id, h, correct, correct and "The answer" or nil)
+  out[#out + 1] = "</div>"
+  return table.concat(out, "\n")
+end
+
+-- The audience's questions, most upvoted first (qa.js). max="6" shows that
+-- many; qr="false" drops the side column's QR.
+local function qa_html(el)
+  local max = tonumber(el.attributes["max"] or "6") or 6
+  local title = el.attributes["title"]
+  local out = {
+    '<div class="livepoll-question lp-qa-q" data-qa="board" data-max="' .. max .. '">',
+    '<div class="lp-main">',
+  }
+  if title then out[#out + 1] = '<h3 class="poll-question">' .. html_escape(title) .. "</h3>" end
+  out[#out + 1] = '<ol class="lp-qa-list"></ol>'
+  out[#out + 1] = '<p class="lp-empty">No questions yet. Ask one on the poll page.</p>'
+  out[#out + 1] = "</div>"
+  out[#out + 1] = panel_side_html(truthy(el.attributes["qr"]) ~= false,
+    '<span class="qa-count lp-count-n">0</span>', "questions", nil)
+  out[#out + 1] = "</div>"
+  return table.concat(out, "\n")
+end
+
+-- The quiz scores so far (quiz.js). top="10" shows that many.
+local function leaderboard_html(el)
+  local top = tonumber(el.attributes["top"] or "10") or 10
+  local title = el.attributes["title"]
+  local out = {
+    '<div class="livepoll-question lp-leader-q lp-noside" data-leaderboard="' .. top .. '">',
+    '<div class="lp-main">',
+  }
+  if title then out[#out + 1] = '<h3 class="poll-question">' .. html_escape(title) .. "</h3>" end
+  out[#out + 1] = '<ol class="lp-leaderboard"></ol>'
+  out[#out + 1] = '<p class="lp-empty">No scores yet.</p>'
+  out[#out + 1] = "</div></div>"
+  return table.concat(out, "\n")
+end
+
 local function generate_div(el)
+  if el.classes:includes("estimate") and estimates[el.identifier] then
+    return pandoc.RawBlock("html", estimate_html(el.identifier, true))
+  end
+  if el.classes:includes("rank") and ranks[el.identifier] then
+    return pandoc.RawBlock("html", rank_html(el.identifier, true))
+  end
+  if el.classes:includes("hotspot") and hotspots[el.identifier] then
+    return pandoc.RawBlock("html", hotspot_html(el.identifier, true))
+  end
+  if el.classes:includes("qa") then
+    qa_boards = qa_boards + 1
+    return pandoc.RawBlock("html", qa_html(el))
+  end
+  if el.classes:includes("leaderboard") then
+    leaderboards = leaderboards + 1
+    return pandoc.RawBlock("html", leaderboard_html(el))
+  end
+
   if el.classes:includes("likert") then
     local id = el.identifier
     if not likerts[id] then return nil end
@@ -1184,6 +1696,9 @@ local function generate_div(el)
       quarto.log.warning("livepoll: a .poll-results div has no for=\"<poll id>\".")
       return nil
     end
+    if estimates[id] then return pandoc.RawBlock("html", estimate_html(id, false)) end
+    if ranks[id] then return pandoc.RawBlock("html", rank_html(id, false)) end
+    if hotspots[id] then return pandoc.RawBlock("html", hotspot_html(id, false)) end
     if likerts[id] then
       local orientation = el.attributes["orientation"]
       if orientation ~= nil and orientation ~= "horizontal" and orientation ~= "vertical" then
@@ -1397,9 +1912,58 @@ local function read_session(meta)
       local votes, total = recorded_votes(rec.id, poll, rec)
       if total > 0 then
         recorded.polls[rec.id] = { votes = votes, voters = tonumber(rec.voters) or total }
+        -- the rounds before the last, drawn beside it
+        if type(rec.rounds) == "table" and #rec.rounds > 1 then
+          local history = {}
+          for i = 1, #rec.rounds - 1 do
+            local round = rec.rounds[i]
+            local v = recorded_votes(rec.id, poll, { options = round.options or {} })
+            history[#history + 1] = { votes = v, voters = tonumber(round.voters) or 0 }
+          end
+          recorded.polls[rec.id].history = history
+        end
         any = true
       end
     end
+  end
+
+  -- estimates, rankings and hotspots carry their raw answers; livepoll.js
+  -- tallies them again
+  local function raw(list, known, key, what)
+    for _, rec in ipairs(list or {}) do
+      if not (rec.id and known[rec.id]) then
+        quarto.log.warning("livepoll: " .. name .. " has " .. what .. " '" .. tostring(rec.id) .. "', which is not in this deck")
+      elseif type(rec.answers) == "table" and #rec.answers > 0 then
+        recorded[key] = recorded[key] or {}
+        recorded[key][rec.id] = rec.answers
+        any = true
+      end
+    end
+  end
+  raw(session.estimates, estimates, "estimates", "estimate")
+  raw(session.ranks, ranks, "ranks", "ranking")
+  raw(session.hotspots, hotspots, "hotspots", "hotspot")
+
+  if type(session.questions) == "table" and #session.questions > 0 then
+    local list = {}
+    for i, q in ipairs(session.questions) do
+      if q.text and (q.status == "open" or q.status == "answered") then
+        list[#list + 1] = { id = "q" .. i, text = q.text, votes = tonumber(q.votes) or 0, status = q.status, t = i }
+      end
+    end
+    if #list > 0 then
+      recorded.questions = list
+      any = true
+    end
+  end
+
+  if type(session.leaderboard) == "table" and #session.leaderboard > 0 then
+    local board = {}
+    for _, p in ipairs(session.leaderboard) do
+      board[#board + 1] = { nick = tostring(p.nickname or ""), score = tonumber(p.score) or 0 }
+    end
+    recorded.leaderboard = board
+    any = true
   end
 
   for _, rec in ipairs(session.clouds or {}) do
@@ -1479,6 +2043,40 @@ local function emit(doc)
     if m ~= nil then in_menu = truthy(meta_value(m)) ~= false end
   end
 
+  -- The features that run across the whole deck rather than on one slide.
+  local function option(key, default)
+    local v = meta.livepoll and meta.livepoll[key]
+    if v == nil then return default end
+    return meta_value(v)
+  end
+  local function switch(key, default)
+    local v = option(key, nil)
+    if v == nil then return default end
+    return truthy(v) ~= false
+  end
+
+  -- qa: true (default) | false | moderated — moderated holds each question
+  -- back until the presenter approves it
+  local qa = option("qa", true)
+  if qa ~= "moderated" then qa = truthy(qa) ~= false end
+  if qa_boards > 0 and qa == false then
+    quarto.log.warning("livepoll: the deck has a .qa slide but `livepoll: qa: false`; the board will stay empty.")
+  end
+
+  -- ids: session (default) | persistent | none — what session.json says about
+  -- who gave each response (see README, "Privacy")
+  local ids = option("ids", "session")
+  if ids ~= "session" and ids ~= "persistent" and ids ~= "none" then
+    quarto.log.warning("livepoll: `ids:` should be session, persistent or none; using session.")
+    ids = "session"
+  end
+
+  local signal_window = tonumber(option("signal-window", "120")) or 120
+  local quiz = switch("quiz", false)
+  if leaderboards > 0 and not quiz then
+    quarto.log.warning("livepoll: the deck has a .leaderboard slide but `livepoll: quiz:` is not on; it will stay empty.")
+  end
+
   if seminar == nil then
     quarto.log.warning(
       "livepoll: no top-level `seminar:` block found. The deck will still "
@@ -1496,7 +2094,8 @@ local function emit(doc)
     end
   end
 
-  if #poll_order == 0 and #cloud_order == 0 and #likert_order == 0 then
+  if #poll_order == 0 and #cloud_order == 0 and #likert_order == 0 and #estimate_order == 0
+    and #rank_order == 0 and #hotspot_order == 0 and qa_boards == 0 then
     quarto.log.warning("livepoll: no polls or word clouds found on the slides.")
   end
 
@@ -1512,7 +2111,24 @@ local function emit(doc)
       question = poll.question,
       options = options,
       correct = poll.correct,
+      maxChoices = poll.max_choices,
+      rounds = poll.rounds,
     }
+  end
+  local published_estimates = {}
+  for id, e in pairs(estimates) do
+    published_estimates[id] = {
+      question = e.question, min = e.min, max = e.max, step = e.step, unit = e.unit,
+      answer = e.answer, tolerance = e.tolerance, tolerancePct = e.tolerancePct, bins = e.bins,
+    }
+  end
+  local published_ranks = {}
+  for id, r in pairs(ranks) do
+    published_ranks[id] = { question = r.question, items = r.items, top = r.top }
+  end
+  local published_hotspots = {}
+  for id, h in pairs(hotspots) do
+    published_hotspots[id] = { question = h.question, image = h.image, alt = h.alt, answer = h.answer }
   end
   for id, cloud in pairs(clouds) do
     published_clouds[id] = { question = cloud.question, maxWords = cloud.maxWords }
@@ -1544,6 +2160,17 @@ local function emit(doc)
     clouds = published_clouds,
     likertOrder = likert_order,
     likerts = published_likerts,
+    estimates = next(published_estimates) and published_estimates or nil,
+    ranks = next(published_ranks) and published_ranks or nil,
+    hotspots = next(published_hotspots) and published_hotspots or nil,
+    timers = next(timers) and timers or nil,
+    qa = qa,
+    quiz = quiz,
+    -- both opt-in: not every room wants them
+    signals = switch("signals", false),
+    reactions = switch("reactions", false),
+    signalWindow = signal_window,
+    ids = ids,
     recorded = read_session(meta),
   }
 
@@ -1560,8 +2187,9 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "1.7.1",
-    scripts = { "qrcode.js", "livepoll.js" },
+    version = "2.0.1",
+    -- livepoll.js first: the others build on window.Livepoll
+    scripts = { "qrcode.js", "livepoll.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
     stylesheets = { "livepoll.css" },
   })
 
@@ -1579,7 +2207,7 @@ return {
     Div = function(el)
       collect_div(el)
       collect_cloud(el)
-      return collect_likert(el)
+      return collect_likert(el) or collect_estimate(el) or collect_rank(el) or collect_hotspot(el)
     end,
     RawBlock = collect_rawblock,
     Meta = read_layout,
