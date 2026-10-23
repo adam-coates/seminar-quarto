@@ -1560,7 +1560,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "1.7.0",
+    version = "1.7.1",
     scripts = { "qrcode.js", "livepoll.js" },
     stylesheets = { "livepoll.css" },
   })
