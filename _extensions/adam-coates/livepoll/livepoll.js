@@ -581,12 +581,14 @@
     var size = slideBox(box);
     if (!size.width || !size.height) return; // slide not on screen yet
 
-    // The panel layout sets its own font on the box (the theme's heading font),
-    // so measure in that, or the words are sized for one font and drawn in
-    // another and run into each other.
+    // Measure in the font the words are drawn in: the box's own. Measuring in
+    // the page body's font sized the words for one font and drew them in
+    // another, and they ran into each other. Under a theme that sets its font on
+    // the slides rather than on <body> (plate: body falls back to Times, slides
+    // are Inter), that was every classic cloud; the embedded layout sets its
+    // own font on the box too.
     var themed = box.classList.contains("lp-cloud");
-    var fontFamily =
-      window.getComputedStyle(themed ? box : document.body).fontFamily || "sans-serif";
+    var fontFamily = window.getComputedStyle(box).fontFamily || "sans-serif";
     var entries = layoutCloud(counts, size, fontFamily);
 
     var existing = {};
