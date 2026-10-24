@@ -1794,3 +1794,16 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* The presenting deck shows the bars and buttons but does not vote with them
+   (poll.js): nothing to suggest they can be clicked. */
+.livepoll-hosting .reveal .poll button,
+.livepoll-hosting .reveal .livepoll-question .poll button.lp-row,
+.livepoll-hosting .reveal .poll-submit,
+.livepoll-hosting .reveal .lp-likert-classic button {
+  cursor: default;
+}
+
+.livepoll-hosting .reveal .livepoll-question .poll button.lp-row:hover:not(:disabled) {
+  border-color: transparent;
+}

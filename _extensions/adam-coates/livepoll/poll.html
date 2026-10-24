@@ -1942,6 +1942,12 @@
           } else if (c.type === "reveal-answer") {
             revealed[c.pollId] = c.correct;
             showAnswer(c.pollId, c.correct);
+          } else if (c.type === "refused") {
+            // the host already has an answer from this device for this one
+            if (active && active.id === c.pollId) {
+              updateStatus("Not counted: this device has already answered", "error");
+              note("⚠️ This device has already answered this question, so this answer was not counted.");
+            }
           } else if (c.type === "hide-answer") {
             // the presenter stepped back: the answer is not given after all
             delete revealed[c.pollId];

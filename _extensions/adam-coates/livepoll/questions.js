@@ -76,7 +76,10 @@
         var value = spec.check(content, d);
         if (value === null) return;
         var record = seen[content.id] || (seen[content.id] = {});
-        if (!LP.claim(record, event, content)) return;
+        if (!LP.claim(record, event, content)) {
+          LP.refuse(event, content.id);
+          return;
+        }
         // Results replayed from session.json are what last class said; a live
         // answer starts afresh, as a poll's first vote does.
         if (replayed[content.id]) {

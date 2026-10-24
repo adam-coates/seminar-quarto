@@ -119,6 +119,16 @@ const initPoll = function(Reveal){
 		const id = poll.getAttribute('data-poll');
 		const max = maxChoices(id);
 
+		// The presenting deck does not vote. Its clicks would count as a
+		// participant's — and in the presenter's own browser that took the
+		// device id the poll page shares, so a vote from that page was then
+		// refused as a repeat. Students following on their own copy of the
+		// deck still vote from the slide.
+		if (LP.hosting()) {
+			button.blur();
+			return;
+		}
+
 		if (max !== 1) {
 			// several choices: toggle, and send them with Submit
 			var picked = poll.querySelectorAll('button.selected').length;
@@ -299,7 +309,10 @@ document.addEventListener('received', function (message) {
       // Count people, not messages: by device and by connection (LP.claim).
       // Each round has its own record, so a new round is a new vote.
       const round = current(poll);
-      if (!LP.claim(round.seen, message, content)) return; // already voted: a reload, not a person
+      if (!LP.claim(round.seen, message, content)) { // already voted: a reload, not a person
+        LP.refuse(message, poll.id);
+        return;
+      }
       round.voters++;
       choices.forEach(function(c){ round.votes[c]++; });
 

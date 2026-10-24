@@ -152,6 +152,14 @@
     return voterKey(event && event.sender);
   };
 
+  // Tell a participant their answer was not counted because this device (or
+  // connection) has answered already. Without it the page says "sent" and the
+  // answer quietly goes nowhere.
+  LP.refuse = function (event, id) {
+    var socket = LP.socketOf(event);
+    if (socket && LP.hosting()) LP.sendTo(socket, { sender: "poll-control", type: "refused", pollId: id });
+  };
+
   LP.escape = function (text) {
     return String(text == null ? "" : text)
       .replace(/&/g, "&amp;")
@@ -242,6 +250,8 @@
   });
   document.addEventListener("seminar", function () {
     if (!LP.connected()) members = {};
+    // the presenting deck's bars are a display, not buttons (livepoll.css)
+    document.documentElement.classList.toggle("livepoll-hosting", LP.hosting());
     roomChanged();
   });
 
@@ -1538,7 +1548,10 @@
     if (!def.statements.some(function (_, s) { return validPoint(def, answers[s]); })) return false;
     var state = likertTally[id] || (likertTally[id] = { counts: emptyCounts(def), voters: 0 });
     var voters = likertAnswers[id] || (likertAnswers[id] = {});
-    if (!LP.claim(voters, event, content)) return false; // already answered: a reload, not a person
+    if (!LP.claim(voters, event, content)) {
+      LP.refuse(event, id); // already answered: a reload, not a person
+      return false;
+    }
     for (var s = 0; s < def.statements.length; s++) {
       if (validPoint(def, answers[s])) state.counts[s][answers[s]]++;
     }
@@ -1751,6 +1764,7 @@
       });
 
       submit.addEventListener("click", function () {
+        if (LP.hosting()) return; // the presenting deck does not answer (see poll.js)
         if (!LP.connected()) {
           alert("You are currently not connected to the live poll. Your answer is ignored.");
           return;
