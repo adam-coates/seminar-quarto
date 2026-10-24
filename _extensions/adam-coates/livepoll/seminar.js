@@ -160,6 +160,14 @@ const initSeminar = function (Reveal) {
   }
 
   function open_or_join_room(secret) {
+    // livepoll: a speaker view preview never hosts. It cannot broadcast (see
+    // makeHost), so a room it opened would take the phones and send them
+    // nothing. livepoll.js passes a Start pressed there to the presentation
+    // window; this is for when that window cannot be reached.
+    if (isReceiver) {
+      logger("This is a speaker view preview: start the seminar from the presentation window.");
+      return;
+    }
     if (status >= STATUS.HOSTING) {
       // already hosting, ignore request to host
       logger("already hosting, ignoring request to host");

@@ -464,6 +464,11 @@ The Live poll tab (Shift+L) has, from the top:
 - **Session**: download `session.json` or a CSV, and when the results were
   last autosaved.
 
+You can run all of this from the speaker view (S) too: the Live poll tab in its
+slide preview works the presentation window — Start there and the
+presentation window hosts — and Shift+T and Alt+R pressed there reach it as
+well.
+
 Other options under `livepoll:`:
 
 | option | default | meaning |
@@ -610,7 +615,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-2.0.1/`), with no cache-busting. If you change the
+version (`livepoll-2.0.2/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.

@@ -2620,10 +2620,135 @@
     });
   }
 
+  /* --------------------------------------- the speaker view's previews */
+
+  // The speaker view (S) shows the slides in two frames that are copies of
+  // this deck (?receiver), each with its own Live poll tab. A copy must never
+  // host: it does not broadcast, so logging in there opened the room, let the
+  // phones join, and then no poll ever reached them. Instead its tab works the
+  // presentation window's: each button press and field is passed over, and
+  // what the real panel shows (status log, live display, questions, players)
+  // is copied back once a second.
+  var isReceiver = /receiver/i.test(window.location.search);
+
+  // speaker view frame -> speaker view window -> the window that opened it
+  function presentationWindow() {
+    try {
+      var main = window.parent !== window && window.parent.opener;
+      if (main && main !== window && main.Livepoll && main.document) return main;
+    } catch (e) {
+      /* not ours to reach */
+    }
+    return null;
+  }
+
+  // The same element in the other window's panel: by id, else by position
+  // among its section's elements of that kind.
+  function counterpart(el, mainDoc) {
+    if (el.id) return mainDoc.getElementById(el.id);
+    var section = el.closest(".livepoll-section");
+    var other = section && section.id && mainDoc.getElementById(section.id);
+    if (!other) return null;
+    var tag = el.tagName.toLowerCase();
+    var mine = Array.prototype.indexOf.call(section.querySelectorAll(tag), el);
+    return other.querySelectorAll(tag)[mine] || null;
+  }
+
+  var MIRRORED = [
+    "#livepoll-live", "#activePollDisplay", "#livepoll-autosave",
+    ".livepoll-qa-list", ".livepoll-qa-hidden", ".livepoll-quiz-list",
+    ".livepoll-signals-now", ".livepoll-section h3",
+  ];
+
+  function mirrorPanel() {
+    var main = presentationWindow();
+    if (!main) return;
+    var mainDoc = main.document;
+    MIRRORED.forEach(function (selector) {
+      var mine = document.querySelectorAll(selector);
+      var theirs = mainDoc.querySelectorAll(selector);
+      for (var i = 0; i < mine.length && i < theirs.length; i++) {
+        if (mine[i].innerHTML !== theirs[i].innerHTML) mine[i].innerHTML = theirs[i].innerHTML;
+      }
+    });
+    var log = document.getElementById("logger");
+    var mainLog = mainDoc.getElementById("logger");
+    if (log && mainLog && log.value !== mainLog.value) {
+      log.value = mainLog.value;
+      log.scrollTop = log.scrollHeight;
+    }
+    var selector = document.getElementById("pollSelector");
+    var mainSelector = mainDoc.getElementById("pollSelector");
+    if (selector && mainSelector && document.activeElement !== selector) selector.value = mainSelector.value;
+  }
+
+  function initReceiverProxy() {
+    var note = document.createElement("p");
+    note.className = "livepoll-hint";
+    note.textContent =
+      "This is the speaker view: these controls work the presentation window, which is the one that hosts.";
+    var broadcast = document.getElementById("broadcast");
+    if (broadcast) broadcast.insertBefore(note, broadcast.querySelector("form"));
+
+    document.addEventListener(
+      "click",
+      function (evt) {
+        var button = evt.target.closest && evt.target.closest("button");
+        if (!button || !button.closest(".livepoll-section")) return;
+        evt.preventDefault();
+        evt.stopImmediatePropagation();
+        var main = presentationWindow();
+        if (!main) {
+          LP.log("Can't reach the presentation window: start the seminar there.");
+          return;
+        }
+        // the fields first (user name, password, the selected question)
+        var section = button.closest(".livepoll-section");
+        section.querySelectorAll("input, select, textarea").forEach(function (field) {
+          var other = counterpart(field, main.document);
+          if (other) other.value = field.value;
+        });
+        var target = counterpart(button, main.document);
+        if (target) target.click();
+        setTimeout(mirrorPanel, 300);
+      },
+      true
+    );
+
+    // The presenter's shortcuts belong to the presentation window too.
+    document.addEventListener(
+      "keydown",
+      function (evt) {
+        var tag = (evt.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return;
+        var timer = evt.key === "T" && evt.shiftKey && !evt.altKey && !evt.ctrlKey && !evt.metaKey;
+        var save =
+          evt.altKey && !evt.ctrlKey && !evt.metaKey &&
+          (evt.code === "KeyR" || (evt.key || "").toLowerCase() === "r");
+        if (!timer && !save) return;
+        var main = presentationWindow();
+        if (!main) return;
+        evt.preventDefault();
+        evt.stopImmediatePropagation();
+        main.document.dispatchEvent(
+          new main.KeyboardEvent("keydown", {
+            key: evt.key, code: evt.code, shiftKey: evt.shiftKey, altKey: evt.altKey,
+            bubbles: true, cancelable: true,
+          })
+        );
+      },
+      true
+    );
+
+    setInterval(mirrorPanel, 1000);
+    mirrorPanel();
+  }
+
   /* ------------------------------------------------------------- start up */
 
   document.addEventListener("DOMContentLoaded", function () {
     buildPanel();
+    if (isReceiver) initReceiverProxy();
     initSeminarControls();
     initPollControls();
     moveIntoMenu();

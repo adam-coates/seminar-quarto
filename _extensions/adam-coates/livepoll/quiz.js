@@ -38,6 +38,9 @@
   var answers = {}; // question id -> [{ who, value, t, round }]
   var roundStarted = {}; // poll id -> when its current round opened
   var scored = {}; // question id -> true once scored
+  // question id -> { who: { right, points } }: what each scoring gave, so a
+  // reveal taken back (the presenter stepped back) can be taken back too
+  var awards = {};
   var anonymous = 0;
 
   function cleanNick(raw) {
@@ -73,6 +76,8 @@
       var nick = cleanNick(content.nickname);
       if (nick && !p.renamed) p.nick = nick;
       LP.sendTo(LP.socketOf(event), { sender: "quiz", type: "you", nickname: p.nick, score: p.score });
+      // on the leaderboard from the moment they join, not from the next score
+      queueBoard();
       drawPanel();
       LP.dirty();
     } else if (content.type === "board") {
@@ -88,6 +93,7 @@
     var list = answers[r.id] || (answers[r.id] = []);
     list.push({ who: r.who, value: r.value, t: r.t, round: r.round || 1 });
     player(r.who).answered++;
+    queueBoard();
   });
 
   document.addEventListener("livepoll-round", function (event) {
@@ -146,8 +152,8 @@
   }
 
   // Once per question (per round, for a poll with rounds), when its answer is
-  // revealed; stepping back and forward again does not score it twice. Only
-  // the last round counts.
+  // revealed, counting the last round only. A reveal that is taken back
+  // (unscore) is scored again, afresh, when the answer is given for real.
   function score(id) {
     if (scored[id] || !scorable(id)) return;
     scored[id] = true;
@@ -163,6 +169,7 @@
       if (right) p.right++;
       results[a.who] = { right: right, points: gained };
     });
+    awards[id] = results;
     if (!Object.keys(results).length) return;
     var table = standings();
     Object.keys(results).forEach(function (who) {
@@ -178,14 +185,35 @@
     LP.dirty();
   }
 
+  // The answer was shown by mistake and taken back: what it scored goes too,
+  // and the question is scored again — with everyone who has answered by
+  // then — when the answer is revealed for real.
+  function unscore(id) {
+    var given = awards[id];
+    delete scored[id];
+    delete awards[id];
+    if (!given) return;
+    Object.keys(given).forEach(function (who) {
+      var p = players[who];
+      if (!p) return;
+      p.score -= given[who].points;
+      if (given[who].right) p.right--;
+      if (sockets[who]) LP.sendTo(sockets[who], { sender: "quiz", type: "you", nickname: p.nick, score: p.score });
+    });
+    announceBoard();
+    drawPanel();
+    LP.dirty();
+  }
+
   document.addEventListener("livepoll-answer", function (event) {
-    if (!enabled() || !LP.hosting() || !event.detail.shown) return;
-    score(event.detail.id);
+    if (!enabled() || !LP.hosting()) return;
+    if (event.detail.shown) score(event.detail.id);
+    else unscore(event.detail.id);
   });
 
+  // Everyone who has joined, scored or not.
   function standings() {
     var list = Object.keys(players)
-      .filter(function (who) { return players[who].answered > 0; })
       .map(function (who) { return { who: who, nick: players[who].nick, score: players[who].score, right: players[who].right }; })
       .sort(function (a, b) { return b.score - a.score || a.nick.localeCompare(b.nick); });
     var rankOf = {};
@@ -208,6 +236,17 @@
     LP.broadcast({ sender: "quiz", type: "board", top: board });
   }
 
+  // A burst of joins or answers is one redraw.
+  var boardQueued = false;
+  function queueBoard() {
+    if (boardQueued || !LP.hosting()) return;
+    boardQueued = true;
+    setTimeout(function () {
+      boardQueued = false;
+      announceBoard();
+    }, 400);
+  }
+
   document.addEventListener("welcome", function (event) {
     if (!enabled() || !LP.hosting() || !event.content || !event.content.user) return;
     LP.sendTo(event.content.user.id, { sender: "quiz", type: "board", top: top() });
@@ -215,12 +254,13 @@
 
   LP.persist("quiz", {
     save: function () {
-      return { players: players, answers: answers, scored: scored, anonymous: anonymous, roundStarted: roundStarted };
+      return { players: players, answers: answers, scored: scored, awards: awards, anonymous: anonymous, roundStarted: roundStarted };
     },
     restore: function (data) {
       players = data.players || {};
       answers = data.answers || {};
       scored = data.scored || {};
+      awards = data.awards || {};
       anonymous = data.anonymous || 0;
       roundStarted = data.roundStarted || {};
       drawBoards(top());
