@@ -1,0 +1,459 @@
+---
+title: "Live poll report"
+subtitle: "What the room said"
+format:
+  html:
+    toc: true
+    page-layout: full
+execute:
+  echo: false
+---
+
+<!--
+  livepoll's session report.
+
+  Copy this file next to your session.json files (Alt+R in the presenting
+  deck saves one per class), list them in `files` below, and render it:
+
+      quarto render report.qmd
+
+  One file reports on one class; several compare them — the same question id
+  in two classes is the same question, so put this year beside last year's.
+  Everything runs in the browser (Observable JS); nothing to install.
+-->
+
+```{ojs}
+//| output: false
+// ---- Your session files, oldest first. One per class. -------------------
+files = [
+  FileAttachment("session.json"),
+  // FileAttachment("week-02/session.json"),
+]
+// -------------------------------------------------------------------------
+```
+
+```{ojs}
+//| output: false
+raw = Promise.all(files.map((f) => f.json()))
+
+// Each class by its date — and its time too, if two share a date.
+dayOf = (s) => new Date(s.started || s.recorded)
+labels = raw.map((s, i) => {
+  if (!s.started && !s.recorded) return `Session ${i + 1}`
+  const day = dayOf(s).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+  const clash = raw.some((t, j) => j !== i && (t.started || t.recorded) && dayOf(t).toDateString() === dayOf(s).toDateString())
+  return clash ? `${day}, ${dayOf(s).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : day
+})
+
+sessions = raw.map((s, i) => ({
+  ...s,
+  responses: s.responses || [],
+  polls: s.polls || [],
+  clouds: s.clouds || [],
+  likerts: s.likerts || [],
+  estimates: s.estimates || [],
+  ranks: s.ranks || [],
+  questions: s.questions || [],
+  signals: s.signals || [],
+  reactions: s.reactions || [],
+  leaderboard: s.leaderboard || [],
+  label: labels[i],
+}))
+
+many = sessions.length > 1
+
+green = "#2e9e4f"
+blue = "#6b8de3"
+grey = "#b9bcc6"
+
+pct = (x) => `${Math.round(x * 100)}%`
+
+// a poll's final round, as { label, votes, correct } with shares
+finalRound = (poll) => {
+  const total = poll.options.reduce((a, o) => a + o.votes, 0)
+  const base = poll.multiple ? poll.voters || total : total
+  return poll.options.map((o) => ({ ...o, share: base ? o.votes / base : 0 }))
+}
+
+// how many answered a poll right, in its last round: the correct option's
+// share (one choice), or unknown for several choices without per-person data
+shareRight = (poll) => {
+  if (!poll.options.some((o) => o.correct)) return null
+  if (poll.multiple) return null
+  return finalRound(poll).filter((o) => o.correct).reduce((a, o) => a + o.share, 0)
+}
+```
+
+## Overview
+
+```{ojs}
+Inputs.table(
+  sessions.map((s) => ({
+    class: s.label,
+    deck: s.deck,
+    responses: s.responses.length,
+    people: new Set(s.responses.map((r) => r.participant).filter(Boolean)).size || "–",
+    polls: s.polls.length,
+    "other questions": s.clouds.length + s.likerts.length + s.estimates.length + s.ranks.length,
+    "audience questions": s.questions.length,
+  })),
+  { layout: "auto" }
+)
+```
+
+```{ojs}
+md`${sessions.some((s) => s.ids === "none")
+  ? "*Recorded with `ids: none`: no per-person data, so peer-instruction switches and per-person results are not shown.*"
+  : ""}`
+```
+
+## Polls
+
+```{ojs}
+pollBlocks = sessions.flatMap((s) =>
+  s.polls.map((poll) => {
+    const rounds = poll.rounds && poll.rounds.length > 1 ? poll.rounds : null
+    const rows = rounds
+      ? rounds.flatMap((r) => {
+          const total = r.options.reduce((a, o) => a + o.votes, 0)
+          const base = poll.multiple ? r.voters || total : total
+          return r.options.map((o, k) => ({
+            label: o.label,
+            round: `Round ${r.round}`,
+            share: base ? o.votes / base : 0,
+            votes: o.votes,
+            correct: poll.options[k] && poll.options[k].correct,
+          }))
+        })
+      : finalRound(poll).map((o) => ({ ...o, round: "" }))
+    const right = shareRight(poll)
+    return html`<div class="lp-block">
+      <h4>${poll.question || poll.id}</h4>
+      <p class="lp-meta">${many ? s.label + " · " : ""}${poll.voters} ${poll.voters === 1 ? "voter" : "voters"}${
+        poll.multiple ? " · several choices" : ""}${right !== null ? " · " + pct(right) + " right" : ""}${
+        rounds ? " · " + rounds.length + " rounds" : ""}</p>
+      ${Plot.plot({
+        marginLeft: 220,
+        marginRight: rounds ? 80 : 20,
+        height: 40 + rows.length * 28,
+        x: { label: poll.multiple ? "share of voters →" : "share of votes →", tickFormat: "%", domain: [0, 1] },
+        // the deck's order, not the alphabet's
+        y: { label: null, domain: poll.options.map((o) => o.label) },
+        fy: rounds ? { label: null } : undefined,
+        marks: [
+          Plot.barX(rows, {
+            x: "share",
+            y: "label",
+            fy: rounds ? "round" : undefined,
+            fill: (d) => (d.correct ? green : blue),
+            title: (d) => `${d.label}: ${d.votes} (${pct(d.share)})`,
+          }),
+          Plot.text(rows, {
+            x: "share",
+            y: "label",
+            fy: rounds ? "round" : undefined,
+            text: (d) => `${d.votes}`,
+            dx: 4,
+            textAnchor: "start",
+          }),
+          Plot.ruleX([0]),
+        ],
+      })}
+    </div>`
+  })
+)
+
+pollBlocks.length ? html`${pollBlocks}` : md`*No polls answered.*`
+```
+
+### Peer instruction: who changed their mind
+
+```{ojs}
+// For each poll asked in rounds: each person's first and last answer, as
+// right / wrong. The classic peer-instruction table.
+switches = sessions.flatMap((s) =>
+  s.polls
+    .filter((p) => p.rounds && p.rounds.length > 1 && p.options.some((o) => o.correct))
+    .map((poll) => {
+      // responses carry option values (A, B, ... unless value="…" was given);
+      // files from before livepoll 2.0 have no value, and A, B, ... is the default
+      const correct = new Set(
+        poll.options.flatMap((o, k) => (o.correct ? [o.value || String.fromCharCode(65 + k)] : []))
+      )
+      const last = poll.rounds.length
+      const first = new Map()
+      const final = new Map()
+      for (const r of s.responses) {
+        if (r.kind !== "poll" || r.id !== poll.id || !r.participant) continue
+        const round = r.round || 1
+        const right = [].concat(r.value).every((v) => correct.has(v))
+        if (round === 1) first.set(r.participant, right)
+        if (round === last) final.set(r.participant, right)
+      }
+      const counts = { "wrong → right": 0, "right → right": 0, "wrong → wrong": 0, "right → wrong": 0 }
+      let people = 0
+      for (const [who, a] of first) {
+        if (!final.has(who)) continue
+        people++
+        counts[`${a ? "right" : "wrong"} → ${final.get(who) ? "right" : "wrong"}`]++
+      }
+      return people ? { class: s.label, question: poll.question || poll.id, people, ...counts } : null
+    })
+    .filter(Boolean)
+)
+
+switches.length
+  ? Inputs.table(switches, { layout: "auto" })
+  : md`*No poll was asked in rounds with an answer marked (or the session has no per-person data).*`
+```
+
+```{ojs}
+//| output: false
+// the same question across classes
+acrossRows = sessions.flatMap((s) =>
+  s.polls
+    .map((p) => ({ class: s.label, id: p.id, question: p.question || p.id, right: shareRight(p) }))
+    .filter((d) => d.right !== null)
+)
+```
+
+```{ojs}
+many && acrossRows.length
+  ? html`<h3>Across classes</h3>${Plot.plot({
+      marginLeft: 50,
+      marginRight: 160,
+      y: { label: "↑ answered right", tickFormat: "%", domain: [0, 1], grid: true },
+      x: { label: null, domain: sessions.map((s) => s.label) },
+      color: { legend: true },
+      marks: [
+        Plot.line(acrossRows, { x: "class", y: "right", stroke: "id" }),
+        Plot.dot(acrossRows, { x: "class", y: "right", stroke: "id", fill: "white", r: 4, title: (d) => `${d.question}: ${pct(d.right)}` }),
+        Plot.text(acrossRows, Plot.selectLast({ x: "class", y: "right", z: "id", text: "id", dx: 8, textAnchor: "start" })),
+      ],
+    })}`
+  : html``
+```
+
+## Estimates
+
+```{ojs}
+estimateBlocks = sessions.flatMap((s) =>
+  s.estimates.map((e) => {
+    const values = e.answers
+    const sorted = [...values].sort((a, b) => a - b)
+    const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+    const unit = e.unit ? (/^[%°]/.test(e.unit) ? e.unit : " " + e.unit) : ""
+    return html`<div class="lp-block">
+      <h4>${e.question || e.id}</h4>
+      <p class="lp-meta">${many ? s.label + " · " : ""}${values.length} answers · median ${median}${unit}${
+        typeof e.answer === "number" ? ` · answer ${e.answer}${unit}` : ""}</p>
+      ${Plot.plot({
+        height: 220,
+        x: { label: `answer${e.unit ? " (" + e.unit + ")" : ""} →`, domain: typeof e.min === "number" && typeof e.max === "number" ? [e.min, e.max] : undefined },
+        y: { label: "↑ people", grid: true },
+        marks: [
+          Plot.rectY(values, Plot.binX({ y: "count" }, {
+            x: (d) => d,
+            fill: blue,
+            thresholds: 20,
+            // a fixed range: bins across all of it, as on the slide
+            domain: typeof e.min === "number" && typeof e.max === "number" ? [e.min, e.max] : undefined,
+            inset: 1,
+          })),
+          Plot.ruleX([median], { stroke: "#333", strokeDasharray: "4 3" }),
+          typeof e.answer === "number" ? Plot.ruleX([e.answer], { stroke: green, strokeWidth: 3 }) : null,
+          Plot.ruleY([0]),
+        ],
+      })}
+    </div>`
+  })
+)
+
+estimateBlocks.length ? html`${estimateBlocks}` : md`*No estimates in these sessions.*`
+```
+
+## Rankings
+
+```{ojs}
+rankBlocks = sessions.flatMap((s) =>
+  s.ranks.map((r) => {
+    const top = r.top || r.items.length
+    const rows = r.items.map((label, i) => {
+      const places = r.answers.map((order) => order.indexOf(i)).filter((p) => p !== -1)
+      return {
+        item: label,
+        points: places.reduce((a, p) => a + (top - p), 0),
+        "times first": places.filter((p) => p === 0).length,
+        "average place": places.length ? +(places.reduce((a, p) => a + p + 1, 0) / places.length).toFixed(2) : null,
+      }
+    }).sort((a, b) => b.points - a.points)
+    return html`<div class="lp-block"><h4>${r.question || r.id}</h4>
+      <p class="lp-meta">${many ? s.label + " · " : ""}${r.answers.length} rankings${top < r.items.length ? `, top ${top} of ${r.items.length}` : ""}</p>
+      ${Inputs.table(rows, { layout: "auto", sort: "points", reverse: true })}</div>`
+  })
+)
+
+rankBlocks.length ? html`${rankBlocks}` : md`*No rankings in these sessions.*`
+```
+
+## Rating scales
+
+```{ojs}
+likertBlocks = sessions.flatMap((s) =>
+  s.likerts.map((l) => {
+    const rows = l.statements.flatMap((statement, i) => {
+      const total = l.counts[i].reduce((a, b) => a + b, 0)
+      return l.labels.map((label, p) => ({ statement, label, point: p, share: total ? l.counts[i][p] / total : 0, n: l.counts[i][p] }))
+    })
+    return html`<div class="lp-block"><h4>${l.question || l.id}</h4>
+      <p class="lp-meta">${many ? s.label + " · " : ""}${l.voters} responses</p>
+      ${Plot.plot({
+        marginLeft: 260,
+        height: 60 + l.statements.length * 36,
+        x: { label: "share →", tickFormat: "%" },
+        y: { label: null },
+        color: { type: "ordinal", domain: l.labels, scheme: "RdBu", legend: true },
+        marks: [Plot.barX(rows, { x: "share", y: "statement", fill: "label", order: "point", title: (d) => `${d.label}: ${d.n}` })],
+      })}</div>`
+  })
+)
+
+likertBlocks.length ? html`${likertBlocks}` : md`*No rating scales in these sessions.*`
+```
+
+## Word clouds
+
+```{ojs}
+cloudBlocks = sessions.flatMap((s) =>
+  s.clouds.map((c) => html`<div class="lp-block"><h4>${c.question || c.id}</h4>
+    <p class="lp-meta">${many ? s.label + " · " : ""}${c.words.reduce((a, w) => a + w.count, 0)} words</p>
+    ${Plot.plot({
+      marginLeft: 140,
+      height: 40 + Math.min(15, c.words.length) * 24,
+      x: { label: "times sent →", grid: true },
+      y: { label: null },
+      marks: [Plot.barX(c.words.slice(0, 15), { x: "count", y: "word", fill: blue, sort: { y: "-x" } })],
+    })}</div>`)
+)
+
+cloudBlocks.length ? html`${cloudBlocks}` : md`*No word clouds in these sessions.*`
+```
+
+## How quickly people answered
+
+```{ojs}
+//| output: false
+timings = sessions.flatMap((s) =>
+  s.responses
+    .filter((r) => s.opened && s.opened[r.id] && r.kind !== "qa")
+    .map((r) => ({
+      class: s.label,
+      question: r.id,
+      seconds: (new Date(r.t) - new Date(s.opened[r.id])) / 1000,
+    }))
+    .filter((d) => d.seconds >= 0 && d.seconds < 1800)
+)
+```
+
+```{ojs}
+timings.length
+  ? Plot.plot({
+      marginLeft: 120,
+      height: 60 + new Set(timings.map((d) => d.question)).size * 30,
+      x: { label: "seconds after the question opened →", grid: true },
+      y: { label: null },
+      fy: many ? { label: null } : undefined,
+      marks: [Plot.boxX(timings, { x: "seconds", y: "question", fy: many ? "class" : undefined })],
+    })
+  : md`*No response times recorded (sessions from before livepoll 2.0 have none).*`
+```
+
+### Over the session
+
+```{ojs}
+timeline = sessions.flatMap((s) => s.responses.map((r) => ({ class: s.label, t: new Date(r.t), kind: r.kind })))
+
+timeline.length
+  ? Plot.plot({
+      height: 220,
+      x: { label: "time →", type: "time" },
+      y: { label: "↑ responses per minute", grid: true },
+      fy: many ? { label: null } : undefined,
+      color: { legend: true },
+      marks: [Plot.rectY(timeline, Plot.binX({ y: "count" }, { x: "t", fill: "kind", interval: d3.utcMinute, fy: many ? "class" : undefined }))],
+    })
+  : html``
+```
+
+## Signals and reactions
+
+```{ojs}
+//| output: false
+slideTitle = (s, id) => id || "(unknown slide)"
+
+presses = sessions.flatMap((s) =>
+  s.signals
+    .filter((x) => x.on && (x.kind === "lost" || x.kind === "slow"))
+    .map((x) => ({ class: s.label, slide: slideTitle(s, x.slide), signal: x.kind === "lost" ? "lost me" : "slow down" }))
+)
+
+reacts = sessions.flatMap((s) => s.reactions.map((x) => ({ class: s.label, slide: slideTitle(s, x.slide), emoji: x.emoji })))
+```
+
+```{ojs}
+presses.length
+  ? Plot.plot({
+      marginLeft: 180,
+      x: { label: "presses →", grid: true },
+      y: { label: null },
+      color: { legend: true, domain: ["lost me", "slow down"], range: ["#d9822b", "#8aa4f0"] },
+      fy: many ? { label: null } : undefined,
+      marks: [Plot.barX(presses, Plot.groupY({ x: "count" }, { y: "slide", fill: "signal", fy: many ? "class" : undefined }))],
+    })
+  : md`*Nobody pressed "You've lost me" or "Slow down".*`
+```
+
+```{ojs}
+reacts.length
+  ? Inputs.table(
+      d3.rollups(reacts, (v) => v.length, (d) => d.class, (d) => d.slide, (d) => d.emoji)
+        .flatMap(([c, slides]) => slides.flatMap(([slide, es]) => es.map(([emoji, n]) => ({ class: c, slide, emoji, n }))))
+        .sort((a, b) => b.n - a.n),
+      { layout: "auto" }
+    )
+  : md`*No reactions.*`
+```
+
+## Audience questions
+
+```{ojs}
+asked = sessions.flatMap((s) =>
+  s.questions.map((q) => ({
+    class: s.label,
+    votes: q.votes,
+    status: q.status,
+    question: q.text,
+    asked: new Date(q.asked).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+  }))
+)
+
+asked.length
+  ? Inputs.table(asked, { layout: "auto", sort: "votes", reverse: true, width: { question: 520 } })
+  : md`*No questions were asked.*`
+```
+
+## Quiz
+
+```{ojs}
+board = sessions.flatMap((s) => s.leaderboard.map((p, i) => ({ class: s.label, place: i + 1, nickname: p.nickname, score: p.score, right: p.right })))
+
+board.length ? Inputs.table(board, { layout: "auto" }) : md`*No quiz scores.*`
+```
+
+```{=html}
+<style>
+  .lp-block { margin: 1.2rem 0 2rem; }
+  .lp-block h4 { margin-bottom: 0.2rem; }
+  .lp-meta { margin: 0 0 0.6rem; color: #6b7280; font-size: 0.9rem; }
+</style>
+```

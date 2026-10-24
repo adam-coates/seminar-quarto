@@ -130,6 +130,11 @@ const initSeminar = function (Reveal) {
     }
   });
 
+  // livepoll: the speaker view's two slide previews are copies of the deck with
+  // ?receiver in the URL, and each joins the room like anyone else. Naming them
+  // lets livepoll leave them out of the "connected" count.
+  var isReceiver = /receiver/i.test(window.location.search);
+
   function checkin(name) {
     if (status && name && username != name) {
       // check out if user name changed
@@ -139,7 +144,7 @@ const initSeminar = function (Reveal) {
 
     if (!status) {
       // use socket id as user name if not user name is not provided
-      username = name || username || socket.id;
+      username = name || username || (isReceiver ? "livepoll-receiver" : socket.id);
 
       // checkin to socket sever
       socket.emit("checkin", username, function (error) {
@@ -293,6 +298,8 @@ const initSeminar = function (Reveal) {
   }
 
   function subscribe() {
+    if (subscribed) return;
+    subscribed = true;
     document.addEventListener("send", function (evt) {
       if (!evt) return;
       // send custom events which are sent by other plugins
@@ -330,6 +337,25 @@ const initSeminar = function (Reveal) {
     );
   }
 
+  // livepoll: an announcement to one participant — the late-joiner sync. Only
+  // hosts may announce, so a phone can trust an announcement in a way it cannot
+  // trust a message, which any participant can send to everyone in the room.
+  function announceTo(evt) {
+    var content = (evt || {}).content || {};
+    var recipient = content.recipient;
+    if (!recipient || recipient === true) return;
+    var custom = Object.assign({}, content);
+    delete custom.recipient;
+    delete custom.copy;
+    socket.emit("announcement", {
+      venue: seminar.url,
+      name: seminar.room,
+      hash: seminar.hash,
+      recipient: recipient,
+      content: { custom: custom },
+    });
+  }
+
   function broadcastStateChange(evt) {
     if (stateChange(receivedState)) {
       // broadcast state change
@@ -340,9 +366,17 @@ const initSeminar = function (Reveal) {
     }
   }
 
+  // livepoll: makeHost() and subscribe() run on every Start and every join, and
+  // used to add their listeners again each time, so after Stop and Start every
+  // message went out twice. Listeners are added once now.
+  var madeHost = false;
+  var subscribed = false;
+
   function makeHost() {
     // Ignore notes windows
     if (window.location.search.match(/receiver/gi)) return;
+    if (madeHost) return;
+    madeHost = true;
 
     subscribe();
     // Monitor events that trigger a change in state
@@ -360,6 +394,7 @@ const initSeminar = function (Reveal) {
         broadcastState(evt);
       }
     });
+    document.addEventListener("announce-to", announceTo);
   }
 
   /*
@@ -425,6 +460,12 @@ console.log(rooms);
       return;
     logger(`${user.id} entered room "${room.venue}|${room.name}|${room.hash}"`);
 
+    // livepoll: everyone in the room hears of everyone else, chair or not; it
+    // keeps the "connected" count. `welcome` below is for the chair alone.
+    var entered = new CustomEvent("entered");
+    entered.content = { user };
+    document.dispatchEvent(entered);
+
     if (status == STATUS.CHAIRING) {
       // send current state to the new participant
       // tell other plugins that they can send a welcome message to the new participant
@@ -432,6 +473,21 @@ console.log(rooms);
       event.content = { user };
       document.dispatchEvent(event);
     }
+  });
+
+  // livepoll: the relay announces this to the room when someone leaves or their
+  // connection drops; nothing listened before, so the count only ever went up.
+  socket.on("left_room", ({ room, user }) => {
+    if (
+      !room ||
+      room.venue != seminar.url ||
+      room.name != seminar.room ||
+      room.hash != seminar.hash
+    )
+      return;
+    var event = new CustomEvent("left");
+    event.content = { user };
+    document.dispatchEvent(event);
   });
 
   socket.on("announcement", ({ time, room, sender, content }) => {
@@ -444,7 +500,13 @@ console.log(rooms);
     )
       return;
 
-    if (content.state && stateChange(content.state)) {
+    // livepoll: not our own state, coming back. Every announcement carries the
+    // slide position it was sent from, and one sent with `copy` returns to the
+    // sender: arriving after the presenter has stepped on, it put them back
+    // where they had been (a vote's results landing just as the answer was
+    // revealed undid the reveal).
+    var own = sender && sender.id && sender.id === socket.id;
+    if (content.state && !own && stateChange(content.state)) {
       // change slide if necessary
       receivedState = content.state;
       Reveal.setState(content.state);
@@ -455,6 +517,10 @@ console.log(rooms);
       var event = new CustomEvent("received");
       event.content = content.custom;
       event.sender = sender;
+      // livepoll: announcements come from a host (the relay refuses anyone
+      // else), messages from anyone in the room. Listeners that change what
+      // the room sees check this rather than take a participant's word for it.
+      event.channel = "announcement";
       document.dispatchEvent(event);
     }
   });
@@ -478,6 +544,7 @@ console.log(rooms);
       // *messages* rather than people: one participant reloading the page and
       // voting again counted twice.
       event.sender = sender;
+      event.channel = "message";
       document.dispatchEvent(event);
     }
   });

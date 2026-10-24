@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" font-family="sans-serif" font-size="14">
+<rect width="100%" height="100%" fill="white"/>
+<line x1="50" y1="360" x2="580" y2="360" stroke="#333" stroke-width="2"/>
+<line x1="50" y1="360" x2="50" y2="20" stroke="#333" stroke-width="2"/>
+<text x="315" y="392" text-anchor="middle" fill="#555">hours studied</text>
+<text x="18" y="190" text-anchor="middle" fill="#555" transform="rotate(-90 18 190)">exam score</text>
+<circle cx="186.5" cy="240.4" r="6" fill="#2a76dd"/>
+<circle cx="148.5" cy="259.9" r="6" fill="#2a76dd"/>
+<circle cx="107.1" cy="316.5" r="6" fill="#2a76dd"/>
+<circle cx="450.6" cy="118.7" r="6" fill="#2a76dd"/>
+<circle cx="434.1" cy="143.1" r="6" fill="#2a76dd"/>
+<circle cx="205.5" cy="225.5" r="6" fill="#2a76dd"/>
+<circle cx="156.8" cy="257.3" r="6" fill="#2a76dd"/>
+<circle cx="510.1" cy="106.9" r="6" fill="#2a76dd"/>
+<circle cx="463.9" cy="123.7" r="6" fill="#2a76dd"/>
+<circle cx="166.5" cy="288.7" r="6" fill="#2a76dd"/>
+<circle cx="221.0" cy="256.5" r="6" fill="#2a76dd"/>
+<circle cx="476.0" cy="147.1" r="6" fill="#2a76dd"/>
+<circle cx="487.9" cy="104.7" r="6" fill="#2a76dd"/>
+<circle cx="390.4" cy="154.1" r="6" fill="#2a76dd"/>
+<circle cx="312.8" cy="190.9" r="6" fill="#2a76dd"/>
+<circle cx="117.8" cy="266.5" r="6" fill="#2a76dd"/>
+<circle cx="513.4" cy="99.0" r="6" fill="#2a76dd"/>
+<circle cx="216.5" cy="255.3" r="6" fill="#2a76dd"/>
+<circle cx="501.4" cy="147.3" r="6" fill="#2a76dd"/>
+<circle cx="472.9" cy="144.4" r="6" fill="#2a76dd"/>
+<circle cx="313.9" cy="216.9" r="6" fill="#2a76dd"/>
+<circle cx="277.7" cy="202.8" r="6" fill="#2a76dd"/>
+<circle cx="151.5" cy="278.2" r="6" fill="#2a76dd"/>
+<circle cx="96.2" cy="264.5" r="6" fill="#2a76dd"/>
+<circle cx="97.7" cy="300.6" r="6" fill="#2a76dd"/>
+<circle cx="326.2" cy="202.3" r="6" fill="#2a76dd"/>
+<circle cx="296.5" cy="236.1" r="6" fill="#2a76dd"/>
+<circle cx="167.5" cy="215.5" r="6" fill="#2a76dd"/>
+<circle cx="269.2" cy="210.9" r="6" fill="#2a76dd"/>
+<circle cx="205.3" cy="223.4" r="6" fill="#2a76dd"/>
+<circle cx="242.5" cy="229.3" r="6" fill="#2a76dd"/>
+<circle cx="337.4" cy="202.3" r="6" fill="#2a76dd"/>
+<circle cx="499.2" cy="113.9" r="6" fill="#2a76dd"/>
+<circle cx="183.1" cy="251.3" r="6" fill="#2a76dd"/>
+<circle cx="434.1" cy="155.4" r="6" fill="#2a76dd"/>
+<circle cx="230.9" cy="241.9" r="6" fill="#2a76dd"/>
+<circle cx="159.1" cy="269.6" r="6" fill="#2a76dd"/>
+<circle cx="402.3" cy="159.0" r="6" fill="#2a76dd"/>
+<circle cx="495.3" cy="95.2" r="6" fill="#2a76dd"/>
+<circle cx="525.2" cy="114.6" r="6" fill="#2a76dd"/>
+<circle cx="450.0" cy="320.0" r="6" fill="#2a76dd"/>
+</svg>

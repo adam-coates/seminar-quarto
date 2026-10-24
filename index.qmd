@@ -9,7 +9,7 @@ filters:
   - livepoll
 # Top level, not under `format:`: the filter reads it to configure poll.html.
 seminar:
-  server: "https://seminar.adamcoates.at/"
+  server: "http://localhost:8080/"
   url: "seminar-quarto-demo"   # the venue
   room: "demo"
   # bcrypt hash of the host password. Replace it with your own (see README):
@@ -17,6 +17,9 @@ seminar:
   hash: "$2a$05$REPLACE.THIS.WITH.YOUR.OWN.BCRYPT.HASH.SEE.README.."
 livepoll:
   layout: embedded             # classic | embedded; per question with layout="..."
+  quiz: true                   # nicknames, points and the leaderboard slide
+  # signals: true             # "Lost me" / "Slow down" buttons on the phones
+  # reactions: true            # emoji reactions that float up the slide
 ---
 
 ## Join in
@@ -64,6 +67,62 @@ A p-value of 0.03 means:
 - [ ] There is a 97% chance the result is real
 :::
 
+## Pick every prime
+
+::: {.poll #primes max-choices="3"}
+- [x] 2
+- [x] 3
+- [ ] 9
+- [x] 11
+:::
+
+::: {.notes}
+Several choices: phones get toggles and a Submit button, and the bars show
+the share of people who picked each one.
+:::
+
+## Peer instruction
+
+::: {.poll #ci rounds="2" timer="60"}
+A 95% confidence interval for a mean is (4.1, 5.3). Which is right?
+
+- [ ] There is a 95% chance the true mean is in (4.1, 5.3)
+- [x] 95% of intervals built this way contain the true mean
+- [ ] 95% of the data lie in (4.1, 5.3)
+:::
+
+::: {.notes}
+Vote, talk to your neighbour, vote again. The timer runs for a minute and
+then moves on to round 2 by itself (or press space). Round 2's bars show where
+round 1 was; after it, space reveals the answer. Shift+T pauses the timer.
+:::
+
+## How many?
+
+::: {.estimate #beans min="0" max="1000" answer="412" tolerance="10%"}
+How many jelly beans are in the jar?
+:::
+
+## What should we revisit?
+
+::: {.rank #revisit top="3"}
+Put your top three in order.
+
+- Sampling distributions
+- Confidence intervals
+- Hypothesis tests
+- Power
+- Regression
+:::
+
+## Spot the outlier
+
+::: {.hotspot #outlier answer="0.75,0.80,0.05"}
+Tap the point that does not fit.
+
+![](images/scatter.svg)
+:::
+
 ## One word for today?
 
 ::: {.wordcloud #today max-words="2"}
@@ -86,6 +145,17 @@ A p-value of 0.03 means:
 
 ::: {.likert #speed labels="Too slow|Just right|Too fast"}
 - Pace of today's lecture
+:::
+
+## Your questions
+
+::: {.qa}
+:::
+
+::: {.notes}
+Questions come in all session from the poll page's Questions tab, and people
+upvote each other's. The Live poll tab lists them: mark them answered, hide
+them, or Show one full screen.
 :::
 
 ## The classic layout
@@ -123,4 +193,9 @@ Buttons here, the chart on the next slide.
 
 ::: {.wordcloud #classic-cloud layout="classic" max-words="1"}
 Describe this deck in one word.
+:::
+
+## Leaderboard
+
+::: {.leaderboard}
 :::

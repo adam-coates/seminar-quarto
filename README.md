@@ -1,4 +1,4 @@
-# livepoll: live polls and word clouds for Quarto revealjs
+# livepoll: live polls, Q&A and quizzes for Quarto revealjs
 
 A Quarto extension that turns a revealjs deck into a live classroom tool. The
 presenter hosts a room on a [seminar](https://github.com/rajgoel/seminar)
@@ -15,13 +15,31 @@ deck's front matter is all the configuration there is.
 ## Features
 
 - **Polls** from a plain Markdown list, with an optional correct answer that is
-  revealed on cue (on the slide and on every phone).
+  revealed on cue (on the slide and on every phone). One choice or several.
+- **Peer instruction**: ask the same poll again after a discussion
+  (`rounds="2"`); the slide shows where round 1 was beside round 2.
+- **Estimates** (a number: histogram, median, the answer as a line),
+  **rankings** (put items in order) and **hotspots** (tap a point on an
+  image: a heat map of the taps).
 - **Word clouds**: words animate and grow as they are submitted.
 - **Rating scales (likert)**: statements rated agree–disagree or on a numeric
   scale, shown as diverging bars or histograms.
 - **Two layouts**: `classic` (vote buttons, then a Chart.js chart on a results
   slide) and `embedded` (the whole question on one slide: bars fill live, with
   the QR code, URL, response count and a LIVE/CLOSED status beside them).
+- **Timers**: `timer="60"` counts down on the slide and the phones, closes
+  voting, then steps to the answer.
+- **Audience questions**: a Questions tab on the poll page, open all session,
+  with upvotes; moderate them, mark them answered, put one up full screen, or
+  show the board on a `.qa` slide.
+- **Signals and reactions** (optional): "You've lost me" / "Slow down" buttons
+  that only the presenter sees counted, and emoji reactions that float up the
+  slide.
+- **Quiz mode**: nicknames, points for right (and fast) answers, a private
+  result on every phone, and a `.leaderboard` slide.
+- **A presenter-only display** in the speaker view (S) and the Live poll tab:
+  the open question, responses out of people connected, the timer, signals,
+  the top questions.
 - **QR codes** on the slide, plus **Shift+Q** for a full-screen QR at any time.
 - **Presenter controls in the revealjs menu**: a "Live poll" tab beside Slides
   and Tools (Shift+L opens it).
@@ -30,6 +48,10 @@ deck's front matter is all the configuration there is.
 - **A participant page, `poll.html`**, that configures itself from the deck.
 - **Session recording**: Alt+R saves the class's answers to `session.json`;
   re-render with it beside the deck and the results are back on the slides.
+  Results are **autosaved** in the presenting browser as they come in, and
+  offered back after a crash.
+- **Data for analysis**: every response with its time, as JSON or CSV, and a
+  report template (`report.qmd`) that charts one class or compares several.
 
 ## Quick start
 
@@ -117,6 +139,37 @@ deck can override single keys (typically just `room`).
 - `#id` is optional, but it is what `.poll-results for=` refers to and what the
   control panel lists.
 
+**Several choices.** `max-choices="2"` lets each person pick up to two;
+`multiple="true"` any number. Phones get toggles and a Submit button, and the
+percentages are of the people who answered. Mark every right option with
+`- [x]`: with several choices a person is right only if they picked exactly
+those.
+
+```markdown
+::: {.poll #primes max-choices="3"}
+- [x] 2
+- [x] 3
+- [ ] 9
+- [x] 11
+:::
+```
+
+**Rounds (peer instruction).** `rounds="2"` adds a step to the slide: vote,
+let people talk it over with a neighbour, press space, and everyone votes
+again. The bars then show round 2, with a marker where each option stood in
+round 1; the phones remind people what they said. The answer comes after the
+last round. **New round** in the Live poll tab gives any poll another round
+on the spot.
+
+```markdown
+::: {.poll #ci rounds="2" timer="60"}
+A 95% confidence interval for a mean is (4.1, 5.3). Which is right?
+
+- [ ] There is a 95% chance the true mean is in (4.1, 5.3)
+- [x] 95% of intervals built this way contain the true mean
+:::
+```
+
 ### Word clouds
 
 ```markdown
@@ -126,8 +179,8 @@ deck can override single keys (typically just `room`).
 :::
 ```
 
-`max-words` is how many words each person may send (default 3). **Clear
-words** in the Live poll tab wipes a cloud.
+`max-words` is how many words each person may send (default 3; the host
+enforces it too). **Reset results** in the Live poll tab wipes a cloud.
 
 ### Rating scales
 
@@ -166,6 +219,126 @@ histogram per statement with its mean and median. In the classic layout the
 question slide has a row of buttons per statement and a Submit button, like a
 classic poll's buttons, and a `.poll-results for="feedback"` slide shows a
 stacked bar chart.
+
+### Estimates
+
+```markdown
+::: {.estimate #beans min="0" max="1000" answer="412" tolerance="10%"}
+How many jelly beans are in the jar?
+:::
+```
+
+People type a number (and get a slider when there is a `min` and `max`). The
+slide draws a histogram of the guesses with the median marked; revealing the
+answer draws it as a line and counts the guesses within `tolerance` (a number
+either side, or a percentage of the answer). `unit="%"` labels the numbers;
+`bins="10"` sets the number of bars.
+
+### Rankings
+
+```markdown
+::: {.rank #revisit top="3"}
+What should we go over again?
+
+- Sampling distributions
+- Confidence intervals
+- Power
+- Regression
+:::
+```
+
+People tap the items in order (`top="3"`: only their first three). The slide
+sorts the items by points — first place earns the most — and they slide into
+their new places as the order changes, with each item's average place and how
+often it came first.
+
+### Hotspots
+
+```markdown
+::: {.hotspot #outlier answer="0.75,0.80,0.05"}
+Tap the point that does not fit.
+
+![](images/scatter.svg)
+:::
+```
+
+People tap a point on the image; the slide shows a heat map of the taps.
+`answer="x,y,r"` is a circle — its centre as fractions of the image's width
+and height, its radius as a fraction of the width — drawn when the answer is
+revealed, with how many taps fell inside it.
+
+Estimates, rankings and hotspots are always drawn in the embedded layout, and
+a `.poll-results for="…"` div draws one on another slide.
+
+### Timers
+
+`timer="60"` on any question counts down from when it opens, on the slide
+(a ring) and on the phones (a bar). When time is up voting closes, and the
+deck steps to the slide's next livepoll step — the answer, the hidden results,
+or the next round. `on-timeout="close"` only closes. **Shift+T** pauses and
+resumes (or gives an untimed question 60 s); the Live poll tab has +15 s and
+End now. Stepping back to a question whose time ran out does not reopen it;
+**Re-open** does.
+
+### Audience questions
+
+The poll page has a **Questions** tab all session: anyone can ask (up to five
+each) and upvote other people's. The Live poll tab lists them, most upvoted
+first, where you mark them answered (✓), hide them (✕), or **Show** one full
+screen on the projector (click or Esc closes it). The top two are in the
+speaker view too. A slide can show the board:
+
+```markdown
+## Your questions
+
+::: {.qa max="6"}
+:::
+```
+
+`livepoll: qa: moderated` holds every question back until you **Approve** it;
+`qa: false` turns questions off.
+
+### Signals and reactions
+
+Both are off unless you turn them on:
+
+```yaml
+livepoll:
+  signals: true     # the "Lost me" / "Slow down" buttons
+  reactions: true   # the emoji reactions
+```
+
+A bar at the foot of the poll page then has **😕 Lost me** and **🐢 Slow down**,
+and/or six emoji reactions. A signal counts for two minutes (`signal-window:`)
+unless taken back, and is shown only to you: in the Live poll tab and the
+speaker view, in red once more than a couple of people, or a tenth of the
+room, are signalling. **Clear signals** resets them. Reactions float up the
+right-hand side of the projected slide.
+
+### Quiz mode
+
+```yaml
+livepoll:
+  quiz: true
+```
+
+Phones ask for a nickname (skipping makes you a numbered player). When a
+question's answer is revealed, each right answer scores 1000 points — on a
+timed question, from 1000 for an instant answer down to 500 at the bell — and
+every phone is told its result, total and place. What counts as right: a
+poll's marked option(s), an estimate within its `tolerance`, a tap inside a
+hotspot's circle. A `.leaderboard` slide shows the top ten (`top="5"` for
+fewer):
+
+```markdown
+## Leaderboard
+
+::: {.leaderboard}
+:::
+```
+
+The Live poll tab lists the players; **Rename** replaces a nickname you would
+rather not see on the projector.
 
 ## Layouts
 
@@ -268,12 +441,28 @@ rating-scale chart 16px text with the legend at the bottom.
 | --- | --- |
 | Shift+L | open or close the Live poll tab in the menu |
 | Shift+Q | full-screen QR code for the poll page (click or Esc closes it) |
+| Shift+T | pause / resume the open question's timer (or start 60 s) |
 | Alt+R | save the session: downloads `session.json` (see below) |
-| space | step to the answer (or the results, when they are hidden) |
+| space | step to the next round, the answer, or the results when they are hidden |
+| S | speaker view, with the live display under the timer |
 
 Opening a poll's slide makes it the live poll, so there is normally nothing to
 click; leaving the slide does not close it. Set `livepoll: auto-activate:
 false` to activate polls by hand from the Live poll tab instead.
+
+The Live poll tab (Shift+L) has, from the top:
+
+- **Live now**: the open question, its responses out of the people connected,
+  the timer, the signals and the top audience questions. The same box sits in
+  the speaker view (S), so you can keep an eye on it without the projector
+  showing it.
+- **Poll control**: activate and deactivate, **Close voting** (the question
+  stays up, answers stop), **Re-open**, **New round** and **Reset results**,
+  for the selected question or else the open one.
+- **Timer**, **Questions**, **Audience signals** and **Quiz**, when those are
+  on.
+- **Session**: download `session.json` or a CSV, and when the results were
+  last autosaved.
 
 Other options under `livepoll:`:
 
@@ -284,11 +473,25 @@ Other options under `livepoll:`:
 | `menu` | `true` | `false` keeps the controls in a floating panel (with a 📡 button) instead of the menu |
 | `position` | `top-right` | where that button sits: `top-left`, `bottom-right`, `bottom-left`, `hidden` |
 | `session` | `session.json` | the recording to replay; `false` turns replay off |
+| `qa` | `true` | audience questions; `moderated` to approve each, `false` for none |
+| `signals` | `false` | the "Lost me" / "Slow down" buttons |
+| `signal-window` | `120` | seconds a signal lasts |
+| `reactions` | `false` | the emoji reactions |
+| `quiz` | `false` | nicknames, scores and the leaderboard |
+| `ids` | `session` | what `session.json` says about who answered: see [Privacy](#privacy) |
 
 ## Recording a session
 
-The vote tallies live only in the presenter's browser while the class runs.
-To keep them, press **Alt+R** in the presenting window before you close it:
+The vote tallies live in the presenter's browser while the class runs. They
+are **autosaved** there (in `localStorage`) a second after every change, so a
+crashed tab, a flat battery or a closed window loses nothing: open the deck
+again in the same browser and it offers to **Restore** them, before or after
+you start hosting. Everyone who already answered stays answered. Closing the
+window with results you have not saved gets the browser's "Leave page?"
+question.
+
+To keep them for good, press **Alt+R** (or **Download session.json** in the
+Live poll tab) in the presenting window before you close it:
 a `session.json` downloads with every poll's counts, every word cloud's words,
 every rating scale's answers and, if the deck uses the
 [Excalidraw](https://github.com/parmsam/quarto-excalidraw) overlay, the
@@ -310,6 +513,17 @@ set, word clouds drawn. No server is needed to view it.
 - `window.plateSession.build()` in the browser console returns what Alt+R
   would save, without downloading it.
 
+Since 2.0 the file also has every response with its time (`responses`),
+when each question opened (`opened`), the rounds of a poll asked more than
+once, the raw answers to estimates, rankings and hotspots, the audience's
+questions, the quiz leaderboard, and the signals and reactions with the slide
+they came on. Estimates, rankings, hotspots, rounds, questions and the
+leaderboard are replayed too.
+
+**Download CSV** in the Live poll tab gives the responses as a table, one row
+per answer — time, seconds since the question opened, question, round,
+participant, answer — ready for `read.csv()` or pandas.
+
 The file is plain JSON (`version: 1`), so you can also write or correct one
 by hand:
 
@@ -328,6 +542,37 @@ by hand:
   ]
 }
 ```
+
+### The report
+
+`_extensions/adam-coates/livepoll/report.qmd` is a report on what the room
+said: every poll, estimate, ranking, rating scale and cloud as a chart, who
+changed their mind between rounds (wrong → right, and so on), how quickly
+people answered, responses over the session, where people pressed "Lost me",
+the audience's questions and the leaderboard. Copy it next to your
+`session.json` files, list them at the top, and `quarto render report.qmd`.
+Given several classes it also plots each question's share of right answers
+across them. It runs in the browser (Observable JS), so there is nothing to
+install.
+
+## Privacy
+
+Nobody signs in and no names are asked for (bar an optional quiz nickname).
+Each browser keeps a random id, in `localStorage`, which is what stops a
+reload from voting twice; the presenting browser sees these ids, but they are
+not people's names. What `session.json` and the CSV say about who answered is
+set by `livepoll: ids:`
+
+| `ids:` | participants are | so you can |
+| --- | --- | --- |
+| `session` (default) | `p1`, `p2`, … in the order they first answered | follow one person through a class (did they change their mind?), not across classes |
+| `persistent` | a hash of the browser's id, salted with the venue | follow the same browser across the classes of a course |
+| `none` | not recorded | see totals and times only |
+
+Quiz nicknames are written into the leaderboard. If you mean to publish
+anything drawn from these files, check what your institution asks of you
+first; `persistent` ids combined with nicknames may well count as personal
+data.
 
 ## Password
 
@@ -355,11 +600,17 @@ static host.
 - The correct answers are in the deck's HTML. Fine for a lecture quiz, not for
   graded assessment.
 - Give each session its own `room`, or two decks pool their votes.
+- Only the host's word counts. The relay lets anyone in the room send a
+  message to everyone else, so neither the phones nor the decks take a
+  participant's word for anything shown to the room: activations, results,
+  timers and the like are only believed when the host *announces* them, which
+  the relay allows no one else to do. The host takes answers from
+  participants, and checks them.
 
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-1.7.1/`), with no cache-busting. If you change the
+version (`livepoll-2.0.1/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.

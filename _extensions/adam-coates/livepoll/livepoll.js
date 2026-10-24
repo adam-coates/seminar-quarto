@@ -22,17 +22,650 @@
 
   var currentActivePoll = null;
 
-  // Published by livepoll.lua into <head>. Also what poll.html reads.
+  // Published by livepoll.lua into <head>. Also what poll.html reads. Parsed
+  // once: it is asked for on every vote.
+  var parsedConfig = null;
   function deckConfig() {
+    if (parsedConfig) return parsedConfig;
     var el = document.getElementById("livepoll-config");
     if (!el) return {};
     try {
-      return JSON.parse(el.textContent);
+      parsedConfig = JSON.parse(el.textContent);
     } catch (e) {
       console.warn("livepoll: could not parse #livepoll-config", e);
-      return {};
+      parsedConfig = {};
+    }
+    return parsedConfig;
+  }
+
+  /* ------------------------------------------------------- shared API */
+
+  // What the other modules build on: timer.js, qa.js, questions.js,
+  // signals.js and quiz.js, and poll.js and session.js where they need it. It
+  // is the same plumbing this file uses itself, given names.
+  var LP = (window.Livepoll = window.Livepoll || {});
+
+  LP.config = deckConfig;
+
+  LP.hosting = function () {
+    return !!(window.RevealSeminar && RevealSeminar.hosting && RevealSeminar.hosting());
+  };
+
+  LP.connected = function () {
+    return !!(window.RevealSeminar && RevealSeminar.connected && RevealSeminar.connected());
+  };
+
+  // To everyone in the room, as an announcement. `copy` (default false) has
+  // the relay send it back to this deck too.
+  LP.broadcast = function (content) {
+    var message = new CustomEvent("broadcast");
+    message.content = content;
+    document.dispatchEvent(message);
+  };
+
+  // To one participant, as an announcement: the late-joiner sync. seminar.js
+  // sends it; a phone believes an announcement where it would not believe a
+  // message, which anyone in the room can send.
+  LP.sendTo = function (userId, content) {
+    if (!userId) return;
+    var message = new CustomEvent("announce-to");
+    message.content = Object.assign({}, content, { recipient: userId });
+    document.dispatchEvent(message);
+  };
+
+  // To the host, from a deck being followed (the classic slides' buttons).
+  LP.toHost = function (content) {
+    var message = new CustomEvent("send");
+    message.content = Object.assign({ recipient: true, device: LP.deviceId() }, content);
+    document.dispatchEvent(message);
+  };
+
+  // A message is what any participant can send to anyone; an announcement only
+  // a host can. A received event without a channel was dispatched by this page
+  // itself (a replayed recording, a restore). State shown to the room is only
+  // ever taken from the latter two.
+  LP.trusted = function (event) {
+    return !event || event.channel !== "message";
+  };
+
+  function randomId(length) {
+    var alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+    var out = "";
+    var bytes = new Uint8Array(length);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    for (var i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length];
+    return out;
+  }
+  LP.randomId = randomId;
+
+  // One per browser, shared with poll.html (same origin, same key): someone
+  // with both the deck and the poll page open is one person.
+  var memoryDevice = null;
+  LP.deviceId = function () {
+    try {
+      var id = localStorage.getItem("livepoll_device");
+      if (!id) {
+        id = randomId(16);
+        localStorage.setItem("livepoll_device", id);
+      }
+      return id;
+    } catch (e) {
+      return memoryDevice || (memoryDevice = randomId(16));
+    }
+  };
+
+  // Same rule as poll.js: count people, not messages. The relay names the
+  // sender; without one (an older relay) every message counts.
+  function voterKey(sender) {
+    if (!sender) return null;
+    if (typeof sender === "string") return sender;
+    return sender.id || sender.name || null;
+  }
+
+  function voterKeys(event, content) {
+    var keys = [];
+    var device = content && content.device;
+    if (typeof device === "string" && device && device.length <= 64) keys.push("d:" + device);
+    var socket = voterKey(event && event.sender);
+    if (socket) keys.push("s:" + socket);
+    return keys;
+  }
+
+  // Who sent a response, as recorded: the device where there is one.
+  LP.who = function (event, content) {
+    return voterKeys(event, content)[0] || null;
+  };
+
+  // Claim a place in `seen` for whoever sent this, or false if they have one.
+  // Keyed by device and by connection both: a reload keeps the device id and a
+  // forged device id keeps the connection, so voting twice takes changing both.
+  // With neither (an old relay, an old page) every message counts, as before.
+  LP.claim = function (seen, event, content) {
+    var keys = voterKeys(event, content);
+    for (var i = 0; i < keys.length; i++) if (seen[keys[i]]) return false;
+    for (var j = 0; j < keys.length; j++) seen[keys[j]] = true;
+    return keys[0] || true;
+  };
+
+  // The socket a participant is reachable on, for a reply to them alone.
+  LP.socketOf = function (event) {
+    return voterKey(event && event.sender);
+  };
+
+  LP.escape = function (text) {
+    return String(text == null ? "" : text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  };
+
+  LP.log = function (message) {
+    if (window.seminarStatusLogger) window.seminarStatusLogger(message);
+  };
+
+  // Listen for one sender's messages: handler(content, event).
+  LP.on = function (sender, handler) {
+    document.addEventListener("received", function (event) {
+      var content = event.content;
+      if (!content || content.sender !== sender) return;
+      handler(content, event);
+    });
+  };
+
+  // The correct answer as written into data-correct: one value, or a JSON
+  // list when a question takes several (`- [x]` on more than one option).
+  LP.correctSet = function (correct) {
+    if (correct == null || correct === "") return [];
+    if (Array.isArray(correct)) return correct.map(String);
+    var text = String(correct);
+    if (text.charAt(0) === "[") {
+      try {
+        return JSON.parse(text).map(String);
+      } catch (e) {
+        /* a value that happens to start with [ */
+      }
+    }
+    return [text];
+  };
+
+  /* ----------------------------------------------------- session state */
+
+  // A hosting session: one class. Phones key their "already voted" record by
+  // it, so next week's deck with the same poll ids starts afresh while a
+  // reload in this class stays locked. Kept across a restore, so a crashed
+  // presenter does not hand everyone a second vote.
+  var sessionId = null;
+  LP.sessionId = function () {
+    if (!sessionId && LP.hosting()) sessionId = randomId(10);
+    return sessionId;
+  };
+
+  // Who is in the room, by socket: everyone but hosts and the speaker view's
+  // slide previews. seminar.js passes on the relay's joins and leaves.
+  var members = {};
+  var hostIds = {};
+
+  function counted(user) {
+    return !!(user && user.id && !hostIds[user.id] && !/^livepoll-receiver/.test(user.name || ""));
+  }
+
+  function asList(list) {
+    if (!list) return [];
+    if (Array.isArray(list)) return list;
+    if (typeof list === "object") return Object.keys(list).map(function (k) { return list[k]; });
+    return [];
+  }
+
+  document.addEventListener("participants", function (event) {
+    if (!event.content) return;
+    hostIds = {};
+    asList(event.content.hosts).forEach(function (h) {
+      if (h && h.id) hostIds[h.id] = true;
+    });
+    members = {};
+    asList(event.content.participants).forEach(function (p) {
+      if (counted(p)) members[p.id] = p;
+    });
+    roomChanged();
+  });
+  document.addEventListener("entered", function (event) {
+    var user = event.content && event.content.user;
+    if (counted(user)) members[user.id] = user;
+    roomChanged();
+  });
+  document.addEventListener("left", function (event) {
+    var user = event.content && event.content.user;
+    if (user && user.id) delete members[user.id];
+    roomChanged();
+  });
+  document.addEventListener("seminar", function () {
+    if (!LP.connected()) members = {};
+    roomChanged();
+  });
+
+  LP.connectedCount = function () {
+    return Object.keys(members).length;
+  };
+
+  function roomChanged() {
+    updatePills();
+    LP.hud.refresh();
+  }
+
+  // Voting on a question can be closed (a timer ran out, or the presenter
+  // closed it) while it stays the active one: the phones keep the question on
+  // screen and stop taking answers, and the host refuses any that still arrive.
+  var closed = {};
+  LP.isOpen = function (id) {
+    return !closed[id];
+  };
+
+  LP.close = function (id) {
+    if (!id || !LP.hosting() || closed[id]) return;
+    LP.broadcast({ sender: "poll-control", copy: true, type: "close-poll", pollId: id });
+  };
+
+  LP.reopen = function (id) {
+    if (!id || !LP.hosting() || !closed[id]) return;
+    LP.broadcast({ sender: "poll-control", copy: true, type: "reopen-poll", pollId: id });
+  };
+
+  LP.on("poll-control", function (content, event) {
+    if (!LP.trusted(event)) return;
+    if (content.type === "close-poll" || content.type === "reopen-poll") {
+      var shut = content.type === "close-poll";
+      if (!!closed[content.pollId] === shut) return;
+      if (shut) closed[content.pollId] = true;
+      else delete closed[content.pollId];
+      document.dispatchEvent(new CustomEvent("livepoll-closed", { detail: { id: content.pollId, closed: shut } }));
+      updatePills();
+      LP.hud.refresh();
+      LP.dirty();
+    }
+  });
+
+  // When each question was first opened in this session, for response times.
+  var openedAt = {};
+  LP.openedAt = function (id) {
+    return openedAt[id] || null;
+  };
+
+  // Every response the host accepts, as an event: session.js keeps them (with
+  // their times) for the export, quiz.js scores them. `who` is LP.who().
+  var responseCount = 0;
+  LP.response = function (detail) {
+    responseCount++;
+    document.dispatchEvent(new CustomEvent("livepoll-response", { detail: Object.assign({ t: Date.now() }, detail) }));
+    LP.hud.refresh();
+    LP.dirty();
+  };
+
+  /* ---------------------------------------------- autosave and restore */
+
+  // The tallies live in the presenting browser and nowhere else until Alt+R.
+  // Each module that keeps any registers how to save and restore them, and
+  // the lot goes to localStorage a second after every change: a crashed tab,
+  // a flat battery or a closed window no longer loses the class.
+  var stores = {};
+  LP.persist = function (key, store) {
+    stores[key] = store;
+  };
+
+  var AUTOSAVE_KEY = "livepoll-autosave:" + location.pathname;
+  var exported = true; // nothing yet that Alt+R has not saved
+  var saveTimer = null;
+  var lastSaved = null;
+
+  LP.dirty = function () {
+    if (!LP.hosting()) return;
+    exported = false;
+    if (saveTimer) return;
+    saveTimer = setTimeout(function () {
+      saveTimer = null;
+      autosave();
+    }, 1000);
+  };
+
+  function snapshot() {
+    var data = {};
+    Object.keys(stores).forEach(function (key) {
+      try {
+        data[key] = stores[key].save();
+      } catch (e) {
+        console.warn("livepoll: could not save " + key, e);
+      }
+    });
+    return {
+      version: 1,
+      saved: Date.now(),
+      session: sessionId,
+      responses: responseCount,
+      exported: exported,
+      data: data,
+    };
+  }
+
+  function autosave() {
+    try {
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snapshot()));
+      lastSaved = new Date();
+      var status = document.getElementById("livepoll-autosave");
+      if (status) status.textContent = "Autosaved " + lastSaved.toLocaleTimeString();
+    } catch (e) {
+      console.warn("livepoll: autosave failed", e);
+      var warn = document.getElementById("livepoll-autosave");
+      if (warn) warn.textContent = "Autosave failed — press Alt+R to save";
     }
   }
+
+  // session.js calls this once session.json is downloaded.
+  LP.markExported = function () {
+    exported = true;
+    if (LP.hosting()) autosave();
+    else {
+      try {
+        var saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "null");
+        if (saved) {
+          saved.exported = true;
+          localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(saved));
+        }
+      } catch (e) {
+        /* nothing to mark */
+      }
+    }
+  };
+
+  function readAutosave() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "null");
+      if (!saved || saved.version !== 1 || !saved.data) return null;
+      return saved;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function restore(saved) {
+    sessionId = saved.session || sessionId;
+    responseCount = saved.responses || 0;
+    // core first: the others look at which questions are closed
+    var keys = Object.keys(saved.data).sort(function (a, b) {
+      return (a === "core" ? 0 : 1) - (b === "core" ? 0 : 1);
+    });
+    keys.forEach(function (key) {
+      if (!stores[key] || saved.data[key] == null) return;
+      try {
+        stores[key].restore(saved.data[key]);
+      } catch (e) {
+        console.warn("livepoll: could not restore " + key, e);
+      }
+    });
+    exported = false;
+    updatePills();
+    LP.hud.refresh();
+    LP.log("Restored " + responseCount + " responses from " + new Date(saved.saved).toLocaleString());
+  }
+
+  LP.persist("core", {
+    save: function () {
+      return { closed: closed, openedAt: openedAt };
+    },
+    restore: function (data) {
+      closed = data.closed || {};
+      openedAt = data.openedAt || {};
+    },
+  });
+
+  // Offered once, on load, for results that never made it into a session.json.
+  // Not in the speaker view's slide previews, which share this storage.
+  function offerRestore() {
+    if (/receiver/i.test(window.location.search)) return;
+    var saved = readAutosave();
+    if (!saved || saved.exported || !saved.responses) return;
+    var bar = document.createElement("div");
+    bar.id = "livepoll-restore";
+    bar.setAttribute("role", "alertdialog");
+    bar.innerHTML =
+      '<span class="livepoll-restore-text"></span>' +
+      '<button type="button" data-act="restore">Restore</button>' +
+      '<button type="button" data-act="discard">Discard</button>';
+    bar.querySelector(".livepoll-restore-text").textContent =
+      "Unsaved live results from " +
+      new Date(saved.saved).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) +
+      " (" + saved.responses + (saved.responses === 1 ? " response" : " responses") + ").";
+    bar.addEventListener("click", function (evt) {
+      var act = evt.target.getAttribute && evt.target.getAttribute("data-act");
+      if (!act) return;
+      if (act === "restore") {
+        restore(saved);
+        lastRestored = saved;
+      } else if (confirm("Discard these results for good?")) {
+        try {
+          localStorage.removeItem(AUTOSAVE_KEY);
+        } catch (e) {
+          /* already gone */
+        }
+      } else {
+        return;
+      }
+      bar.parentNode.removeChild(bar);
+    });
+    bar.addEventListener("keydown", function (evt) {
+      evt.stopPropagation();
+    });
+    document.body.appendChild(bar);
+  }
+  var lastRestored = null;
+
+  // Restored before hosting started: save it under this session as soon as it
+  // does, so a second crash finds it too.
+  document.addEventListener("seminar", function () {
+    if (lastRestored && LP.hosting()) {
+      lastRestored = null;
+      exported = false;
+      autosave();
+    }
+  });
+
+  // Leaving with results Alt+R has not saved gets the browser's own "leave
+  // this page?" question. The autosave has them either way.
+  window.addEventListener("beforeunload", function (event) {
+    if (exported || !LP.hosting()) return;
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      autosave();
+    }
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  /* ------------------------------------------------- presenter display */
+
+  // What only the presenter should see — live counts, the timer, who is lost,
+  // the top question — drawn in the "Live now" box of the Live poll tab and in
+  // the speaker view (S), never on the projected slide. Modules add parts:
+  // LP.hud.add(key, order, render) where render() returns HTML or "".
+  var hudParts = [];
+  var hudQueued = false;
+  var speakerWindow = null;
+
+  LP.hud = {
+    add: function (key, order, render) {
+      hudParts = hudParts.filter(function (p) { return p.key !== key; });
+      hudParts.push({ key: key, order: order, render: render });
+      hudParts.sort(function (a, b) { return a.order - b.order; });
+      LP.hud.refresh();
+    },
+    refresh: function () {
+      if (hudQueued) return;
+      hudQueued = true;
+      setTimeout(function () {
+        hudQueued = false;
+        drawHud();
+      }, 150);
+    },
+  };
+
+  function hudHtml() {
+    var out = [];
+    hudParts.forEach(function (part) {
+      var html = "";
+      try {
+        html = part.render() || "";
+      } catch (e) {
+        console.warn("livepoll: HUD part " + part.key + " failed", e);
+      }
+      if (html) out.push('<div class="lp-hud-part" data-part="' + part.key + '">' + html + "</div>");
+    });
+    return out.join("");
+  }
+
+  function drawHud() {
+    var html = hudHtml() || '<div class="lp-hud-part lp-hud-idle">Not hosting</div>';
+    var box = document.getElementById("livepoll-live");
+    if (box) box.innerHTML = html;
+    drawSpeakerHud(html);
+  }
+
+  // The notes plugin opens the speaker view as about:blank and writes its page
+  // into it, so it shares this origin and can be drawn into directly. The
+  // window is caught as it is opened, or — after this page reloads — from the
+  // heartbeat it keeps sending to reconnect.
+  var nativeOpen = window.open;
+  window.open = function (url, name) {
+    var win = nativeOpen.apply(window, arguments);
+    if (name === "reveal.js - Notes" && win) {
+      speakerWindow = win;
+      LP.hud.refresh();
+    }
+    return win;
+  };
+
+  window.addEventListener("message", function (event) {
+    if (speakerWindow && !speakerWindow.closed) return;
+    if (typeof event.data !== "string" || event.data.indexOf("reveal-notes") === -1) return;
+    try {
+      if (event.source && event.source.document && event.source.location.origin === location.origin) {
+        speakerWindow = event.source;
+        LP.hud.refresh();
+      }
+    } catch (e) {
+      /* another origin's window: not ours to draw in */
+    }
+  });
+
+  var SPEAKER_HUD_CSS =
+    ".livepoll-hud{margin:10px 0 0;padding:8px 10px;border-radius:6px;background:rgba(0,0,0,.06);" +
+    "font:14px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#222}" +
+    ".livepoll-hud .lp-hud-part{padding:3px 0}" +
+    ".livepoll-hud .lp-hud-part+.lp-hud-part{border-top:1px solid rgba(0,0,0,.08)}" +
+    ".livepoll-hud .lp-hud-title{font-weight:700}" +
+    ".livepoll-hud .lp-hud-muted{opacity:.65}" +
+    ".livepoll-hud .lp-hud-alert{color:#b42318;font-weight:700}" +
+    ".livepoll-hud .lp-hud-big{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}" +
+    ".livepoll-hud ol{margin:2px 0 0 18px;padding:0}";
+
+  function drawSpeakerHud(html) {
+    if (!speakerWindow || speakerWindow.closed) return;
+    var doc;
+    try {
+      doc = speakerWindow.document;
+    } catch (e) {
+      return;
+    }
+    var controls = doc && doc.getElementById("speaker-controls");
+    if (!controls) {
+      // still writing itself; try again shortly
+      setTimeout(LP.hud.refresh, 500);
+      return;
+    }
+    var hud = doc.getElementById("livepoll-hud");
+    if (!hud) {
+      var style = doc.createElement("style");
+      style.textContent = SPEAKER_HUD_CSS;
+      doc.head.appendChild(style);
+      hud = doc.createElement("div");
+      hud.id = "livepoll-hud";
+      hud.className = "livepoll-hud";
+      var notes = controls.querySelector(".speaker-controls-notes");
+      controls.insertBefore(hud, notes || null);
+    }
+    hud.innerHTML = html;
+  }
+
+  // Timers count down between events.
+  setInterval(function () {
+    if (LP.hosting() || speakerWindow) drawHud();
+  }, 1000);
+
+  /* ----------------------------------------------- panel sections, kinds */
+
+  // A module's own block of controls in the Live poll tab (or the floating
+  // panel): wherever the built-in ones are by the time it asks.
+  LP.addSection = function (id, title, html) {
+    var section = document.createElement("div");
+    section.className = "livepoll-section";
+    section.id = id;
+    section.innerHTML = "<h3>" + title + "</h3>" + html;
+    var slot = inMenu && document.getElementById("livepoll-menu-slot");
+    var session = document.getElementById("livepoll-session");
+    var parent = slot || document.getElementById("livepoll-panel");
+    // keep the Session block last
+    if (session && session.parentNode === parent) parent.insertBefore(section, session);
+    else parent.appendChild(section);
+    return section;
+  };
+
+  // Which kind of question an id is, and what each kind knows how to do for
+  // the presenter's buttons. Modules register: LP.kinds.estimate = { reset }.
+  LP.kinds = {};
+  LP.kindOf = function (id) {
+    var cfg = deckConfig();
+    var tables = {
+      poll: cfg.polls, wordcloud: cfg.clouds, likert: cfg.likerts,
+      estimate: cfg.estimates, rank: cfg.ranks, hotspot: cfg.hotspots,
+    };
+    for (var kind in tables) if (tables[kind] && tables[kind][id]) return kind;
+    return null;
+  };
+
+  // The first lines of the presenter display: what is open and who answered.
+  LP.hud.add("active", 10, function () {
+    if (!LP.hosting()) return "";
+    var connected = LP.connectedCount();
+    var id = currentActivePoll;
+    if (!id) {
+      return '<span class="lp-hud-muted">No question open · ' + connected + " connected</span>";
+    }
+    var kind = LP.kindOf(id);
+    var count = kind && LP.kinds[kind] && LP.kinds[kind].count ? LP.kinds[kind].count(id) : null;
+    var out =
+      '<div class="lp-hud-title">' + LP.escape(id) +
+      ' <span class="lp-hud-muted">' + (LP.isOpen(id) ? "open" : "closed") + "</span></div>";
+    if (count) {
+      var people = count.people !== undefined ? count.people : count.n;
+      out +=
+        '<div><span class="lp-hud-big">' + count.n + "</span> " + LP.escape(count.label) +
+        (connected
+          ? ' <span class="lp-hud-muted">· ' + connected + " connected, " +
+            Math.min(100, Math.round((people / connected) * 100)) + "% answered</span>"
+          : "") +
+        "</div>";
+    }
+    return out;
+  });
+
+  // A participant's page asks for the current state when it joins; answer it
+  // exactly as a new arrival is answered, by every module's `welcome`.
+  LP.sync = function (userId) {
+    if (!userId || !LP.hosting()) return;
+    var event = new CustomEvent("welcome");
+    event.content = { user: { id: userId } };
+    document.dispatchEvent(event);
+  };
 
   /* ---------------------------------------------------------------- panel */
 
@@ -55,14 +688,29 @@
       "  <p>Status log:</p>" +
       '  <textarea id="logger" spellcheck="false" readonly>Trying to connect to server ...\n</textarea>' +
       "</div>" +
+      '<div class="livepoll-section" id="livepoll-live-section">' +
+      "  <h3>Live now</h3>" +
+      '  <div id="livepoll-live" class="livepoll-hud-box"></div>' +
+      "</div>" +
       '<div class="livepoll-section" id="pollControl">' +
       "  <h3>Poll control</h3>" +
       "  <p>Active poll: <span id='activePollDisplay'>None</span></p>" +
       '  <select id="pollSelector"><option value="">-- Select Poll --</option></select>' +
       '  <button id="activatePoll" type="button">Activate</button>' +
       '  <button id="deactivatePoll" type="button">Deactivate</button>' +
-      '  <button id="clearCloud" type="button">Clear words</button>' +
-      "  <p class='livepoll-hint'>Activate a poll to enable voting on the standalone poll page. Shift+Q shows the QR code full screen.</p>" +
+      '  <div class="livepoll-row">' +
+      '    <button id="closePoll" type="button" title="Stop taking answers; the question stays up">Close voting</button>' +
+      '    <button id="reopenPoll" type="button">Re-open</button>' +
+      '    <button id="newRound" type="button" title="Vote again on the same question (peer instruction)">New round</button>' +
+      '    <button id="resetPoll" type="button">Reset results</button>' +
+      "  </div>" +
+      "  <p class='livepoll-hint'>The buttons act on the selected question, or the active one. Opening a question's slide activates it. Shift+Q shows the QR code full screen.</p>" +
+      "</div>" +
+      '<div class="livepoll-section" id="livepoll-session">' +
+      "  <h3>Session</h3>" +
+      '  <button id="livepoll-download" type="button" title="Alt+R">Download session.json</button>' +
+      '  <button id="livepoll-csv" type="button">Download CSV</button>' +
+      '  <p class="livepoll-hint" id="livepoll-autosave">Results are autosaved in this browser while you host.</p>' +
       "</div>"
     );
   }
@@ -287,22 +935,85 @@
       });
   }
 
+  // Every question element on the slides, of whatever kind, by its id.
+  var QUESTION_SELECTOR =
+    ".poll[data-poll], .wordcloud[data-wordcloud], .likert[data-likert], " +
+    ".lp-estimate[data-estimate], .lp-rank[data-rank], .lp-hotspot[data-hotspot]";
+
+  function questionId(el) {
+    return (
+      el.getAttribute("data-poll") ||
+      el.getAttribute("data-wordcloud") ||
+      el.getAttribute("data-likert") ||
+      el.getAttribute("data-estimate") ||
+      el.getAttribute("data-rank") ||
+      el.getAttribute("data-hotspot")
+    );
+  }
+  LP.questionId = questionId;
+
   function initPollControls() {
     var pollSelector = document.getElementById("pollSelector");
-    var items = document.querySelectorAll(
-      ".poll[data-poll], .wordcloud[data-wordcloud], .likert[data-likert]"
-    );
+    var items = document.querySelectorAll(QUESTION_SELECTOR);
+    var listed = {};
 
     for (var i = 0; i < items.length; i++) {
-      var itemId =
-        items[i].getAttribute("data-poll") ||
-        items[i].getAttribute("data-wordcloud") ||
-        items[i].getAttribute("data-likert");
+      var itemId = questionId(items[i]);
+      if (!itemId || listed[itemId]) continue;
+      listed[itemId] = true;
       var option = document.createElement("option");
       option.value = itemId;
       option.textContent = itemId;
       pollSelector.appendChild(option);
     }
+
+    function target(needHost) {
+      var id = pollSelector.value || currentActivePoll;
+      if (!id) {
+        alert("Select a question first");
+        return null;
+      }
+      if (needHost && !LP.hosting()) {
+        alert("You must be hosting the seminar for that");
+        return null;
+      }
+      return id;
+    }
+
+    document.getElementById("closePoll").addEventListener("click", function () {
+      var id = target(true);
+      if (id) LP.close(id);
+    });
+    document.getElementById("reopenPoll").addEventListener("click", function () {
+      var id = target(true);
+      if (id) LP.reopen(id);
+    });
+    document.getElementById("newRound").addEventListener("click", function () {
+      var id = target(true);
+      if (!id) return;
+      if (LP.kindOf(id) !== "poll" || !LP.newRound) {
+        alert("Only a multiple-choice poll can have rounds");
+        return;
+      }
+      LP.newRound(id);
+    });
+    document.getElementById("resetPoll").addEventListener("click", function () {
+      var id = target(true);
+      if (!id) return;
+      if (!confirm('Remove every answer given to "' + id + '"?')) return;
+      var kind = LP.kindOf(id);
+      if (kind && LP.kinds[kind] && LP.kinds[kind].reset) {
+        LP.kinds[kind].reset(id);
+        LP.log("Reset: " + id);
+        LP.dirty();
+      }
+    });
+    document.getElementById("livepoll-download").addEventListener("click", function () {
+      if (window.plateSession) window.plateSession.export();
+    });
+    document.getElementById("livepoll-csv").addEventListener("click", function () {
+      if (window.plateSession) window.plateSession.exportCsv();
+    });
 
     document
       .getElementById("activatePoll")
@@ -322,23 +1033,6 @@
         deactivatePolls();
       });
 
-    document
-      .getElementById("clearCloud")
-      .addEventListener("click", function (evt) {
-        evt.preventDefault();
-        var id = pollSelector.value || currentActivePoll;
-        if (!id || !(deckConfig().clouds || {})[id]) {
-          alert("Select a word cloud first");
-          return;
-        }
-        if (!window.RevealSeminar || !RevealSeminar.hosting()) {
-          alert("You must be hosting the seminar to clear a word cloud");
-          return;
-        }
-        if (!confirm("Remove every word submitted to \"" + id + "\"?")) return;
-        clearCloud(id);
-        window.seminarStatusLogger("Cleared word cloud: " + id);
-      });
   }
 
   /* ------------------------------------------------ activate / deactivate */
@@ -358,18 +1052,50 @@
       sender: "poll-control",
       type: "activate-poll",
       pollId: pollId,
+      session: LP.sessionId(),
+      round: LP.roundOf ? LP.roundOf(pollId) : 1,
     };
     document.dispatchEvent(message);
 
     currentActivePoll = pollId;
+    if (!openedAt[pollId]) openedAt[pollId] = Date.now();
     var display = document.getElementById("activePollDisplay");
     if (display) display.textContent = pollId;
     var selector = document.getElementById("pollSelector");
     if (selector) selector.value = pollId;
     window.seminarStatusLogger("Activated poll: " + pollId);
     updatePills();
+    activeChanged();
+    LP.dirty();
     return true;
   }
+
+  LP.active = function () {
+    return currentActivePoll;
+  };
+  LP.activate = activatePoll;
+  LP.deactivate = deactivatePolls;
+
+  function activeChanged() {
+    document.dispatchEvent(new CustomEvent("livepoll-activated", { detail: { id: currentActivePoll } }));
+    LP.hud.refresh();
+  }
+
+  // A deck following the host learns the active question from the host's
+  // announcements, so its LIVE / CLOSED pills are right too.
+  LP.on("poll-control", function (content, event) {
+    if (LP.hosting() || !LP.trusted(event)) return;
+    if (content.type === "activate-poll") {
+      if (currentActivePoll === content.pollId) return;
+      currentActivePoll = content.pollId;
+    } else if (content.type === "deactivate-poll") {
+      currentActivePoll = null;
+    } else {
+      return;
+    }
+    updatePills();
+    activeChanged();
+  });
 
   function deactivatePolls(quiet) {
     if (!window.RevealSeminar || !RevealSeminar.hosting()) {
@@ -388,6 +1114,7 @@
     if (selector) selector.value = "";
     window.seminarStatusLogger("Deactivated all polls");
     updatePills();
+    activeChanged();
     return true;
   }
 
@@ -702,23 +1429,76 @@
     }, 0);
   });
 
+  // How many words each participant has sent per cloud, host only: the page
+  // stops at max-words, and now so does the host, for anyone who skips the page.
+  var cloudSenders = {}; // cloudId -> { voter key -> words sent }
+
+  function cloudAllowance(id, event, content) {
+    var def = (deckConfig().clouds || {})[id];
+    var max = (def && def.maxWords) || 3;
+    var who = LP.who(event, content);
+    if (!who) return true;
+    var sent = cloudSenders[id] || (cloudSenders[id] = {});
+    if ((sent[who] || 0) >= max) return false;
+    sent[who] = (sent[who] || 0) + 1;
+    return true;
+  }
+
   document.addEventListener("received", function (event) {
     var content = event.content;
     if (!content || content.sender !== "wordcloud-plugin") return;
 
     if (content.type === "word") {
       // only the host keeps the tally, exactly as the poll plugin does
-      if (!window.RevealSeminar || !RevealSeminar.hosting()) return;
-      addWords(content.cloud, content.words || [content.word]);
+      if (!LP.hosting()) return;
+      if (!(deckConfig().clouds || {})[content.cloud] || !LP.isOpen(content.cloud)) return;
+      var words = (content.words || [content.word]).filter(function (w) {
+        return typeof w === "string" && w.trim() && w.length <= 40;
+      });
+      if (!words.length || !cloudAllowance(content.cloud, event, content)) return;
+      addWords(content.cloud, words.slice(0, 1));
       renderCloud(content.cloud);
       broadcastCounts(content.cloud);
+      LP.response({ kind: "wordcloud", id: content.cloud, who: LP.who(event, content), value: words[0].trim() });
     } else if (content.type === "counts") {
+      if (!LP.trusted(event)) return;
       cloudCounts[content.cloud] = content.counts || {};
       renderCloud(content.cloud);
     } else if (content.type === "clear") {
+      if (!LP.trusted(event)) return;
       cloudCounts[content.cloud] = {};
       renderCloud(content.cloud);
     }
+  });
+
+  LP.kinds.wordcloud = {
+    reset: function (id) {
+      delete cloudSenders[id];
+      clearCloud(id);
+    },
+    count: function (id) {
+      var people = Object.keys(cloudSenders[id] || {}).length;
+      var words = 0;
+      var counts = cloudCounts[id] || {};
+      for (var w in counts) words += counts[w];
+      return { n: words, label: "words from " + people + (people === 1 ? " person" : " people"), people: people };
+    },
+  };
+
+  LP.persist("clouds", {
+    save: function () {
+      return { counts: cloudCounts, senders: cloudSenders };
+    },
+    restore: function (data) {
+      cloudSenders = data.senders || {};
+      Object.keys(data.counts || {}).forEach(function (id) {
+        // through the same message a live session uses, so session.js and
+        // every drawing of the cloud see it
+        var event = new CustomEvent("received");
+        event.content = { sender: "wordcloud-plugin", type: "counts", cloud: id, counts: data.counts[id] };
+        document.dispatchEvent(event);
+      });
+    },
   });
 
   /* ------------------------------------------------------------ likert */
@@ -747,39 +1527,58 @@
     });
   }
 
-  // Same rule as poll.js: count people, not messages. The relay names the
-  // sender; without one (an older relay) every message counts.
-  function voterKey(sender) {
-    if (!sender) return null;
-    if (typeof sender === "string") return sender;
-    return sender.id || sender.name || null;
+  function validPoint(def, p) {
+    return typeof p === "number" && p >= 0 && p < def.labels.length && p === Math.floor(p);
   }
 
-  function addLikertAnswer(id, answers, sender) {
+  function addLikertAnswer(id, answers, event, content) {
     var def = likertDef(id);
-    if (!def || !Array.isArray(answers)) return false;
+    if (!def || !Array.isArray(answers) || !LP.isOpen(id)) return false;
+    // nothing usable in it: not worth a place in the count
+    if (!def.statements.some(function (_, s) { return validPoint(def, answers[s]); })) return false;
     var state = likertTally[id] || (likertTally[id] = { counts: emptyCounts(def), voters: 0 });
     var voters = likertAnswers[id] || (likertAnswers[id] = {});
-    var key = voterKey(sender);
-    if (key) {
-      if (voters[key]) return false; // already answered: a reload, not a person
-      voters[key] = true;
-    }
-    var counted = false;
+    if (!LP.claim(voters, event, content)) return false; // already answered: a reload, not a person
     for (var s = 0; s < def.statements.length; s++) {
-      var p = answers[s];
-      if (typeof p === "number" && p >= 0 && p < def.labels.length && p === Math.floor(p)) {
-        state.counts[s][p]++;
-        counted = true;
-      }
-    }
-    if (!counted) {
-      if (key) delete voters[key];
-      return false;
+      if (validPoint(def, answers[s])) state.counts[s][answers[s]]++;
     }
     state.voters++;
+    LP.response({ kind: "likert", id: id, who: LP.who(event, content), value: answers.slice(0, def.statements.length) });
     return true;
   }
+
+  LP.kinds.likert = {
+    reset: function (id) {
+      var def = likertDef(id);
+      if (!def) return;
+      likertTally[id] = { counts: emptyCounts(def), voters: 0 };
+      likertAnswers[id] = {};
+      likertState[id] = { counts: likertTally[id].counts, voters: 0 };
+      renderLikert(id);
+      broadcastLikert(id);
+    },
+    count: function (id) {
+      return { n: (likertTally[id] || {}).voters || 0, label: "responses" };
+    },
+  };
+
+  LP.persist("likerts", {
+    save: function () {
+      return { tally: likertTally, answers: likertAnswers };
+    },
+    restore: function (data) {
+      likertAnswers = data.answers || {};
+      likertTally = data.tally || {};
+      Object.keys(likertTally).forEach(function (id) {
+        var event = new CustomEvent("received");
+        event.content = {
+          sender: "likert-plugin", type: "counts", likert: id,
+          counts: likertTally[id].counts, voters: likertTally[id].voters,
+        };
+        document.dispatchEvent(event);
+      });
+    },
+  });
 
   function broadcastLikert(id) {
     var message = new CustomEvent("broadcast");
@@ -800,14 +1599,15 @@
 
     if (content.type === "answer") {
       // only the host keeps the tally
-      if (!window.RevealSeminar || !RevealSeminar.hosting()) return;
-      if (addLikertAnswer(content.likert, content.answers, event.sender)) {
+      if (!LP.hosting()) return;
+      if (addLikertAnswer(content.likert, content.answers, event, content)) {
         var tally = likertTally[content.likert];
         likertState[content.likert] = { counts: tally.counts, voters: tally.voters };
         renderLikert(content.likert);
         broadcastLikert(content.likert);
       }
     } else if (content.type === "counts") {
+      if (!LP.trusted(event)) return;
       var def = likertDef(content.likert);
       if (!def || !Array.isArray(content.counts)) return;
       likertState[content.likert] = { counts: content.counts, voters: content.voters || 0 };
@@ -951,19 +1751,16 @@
       });
 
       submit.addEventListener("click", function () {
-        if (!window.RevealSeminar || !RevealSeminar.connected()) {
+        if (!LP.connected()) {
           alert("You are currently not connected to the live poll. Your answer is ignored.");
           return;
         }
-        var message = new CustomEvent("send");
-        message.content = {
+        LP.toHost({
           sender: "likert-plugin",
-          recipient: true,
           type: "answer",
           likert: id,
           answers: answers.slice(),
-        };
-        document.dispatchEvent(message);
+        });
         box.querySelectorAll("button").forEach(function (b) {
           b.disabled = true;
         });
@@ -1017,12 +1814,21 @@
 
   function panelOnSlide(slide, pollId) {
     if (!slide) return null;
-    return slide.querySelector('.livepoll-question[data-poll="' + pollId + '"]');
+    var panels = slide.querySelectorAll(".livepoll-question");
+    for (var i = 0; i < panels.length; i++) {
+      if (questionId(panels[i]) === pollId) return panels[i];
+    }
+    return null;
   }
 
-  // Bars are scaled to the leading option, the percentage is of all votes.
-  function updatePanelBars(panel, votes) {
-    var rows = panel.querySelectorAll(".lp-row[data-value]");
+  // Bars are scaled to the leading option, the percentage is of all votes —
+  // or, where a poll takes several choices, of the people who answered, since
+  // the votes then add up to more than everyone.
+  //
+  // From a second round on (peer instruction: vote, discuss, vote again) both
+  // rounds are drawn as shares on one scale, the earlier one as a marker on
+  // the track, so the shift is what you see.
+  function shares(rows, votes, voters, multi) {
     var total = 0;
     var max = 0;
     for (var i = 0; i < rows.length; i++) {
@@ -1030,25 +1836,101 @@
       total += n;
       if (n > max) max = n;
     }
+    return { total: total, max: max, base: multi ? voters || total : total };
+  }
+
+  function updatePanelBars(panel, votes, info) {
+    info = info || {};
+    var multi = panel.getAttribute("data-multi") === "true";
+    var rows = panel.querySelectorAll(".lp-row[data-value]");
+    var now = shares(rows, votes, info.voters, multi);
+    var history = info.history || [];
+    var prev = history.length ? history[history.length - 1] : null;
+    var before = prev ? shares(rows, prev.votes || {}, prev.voters, multi) : null;
+    panel.classList.toggle("lp-rounds", !!prev);
+    var badge = panel.querySelector(".lp-round-badge");
+    if (badge) badge.textContent = prev ? "Round " + (history.length + 1) : "";
+
     for (var j = 0; j < rows.length; j++) {
-      var count = votes[rows[j].getAttribute("data-value")] || 0;
-      rows[j].querySelector(".lp-fill").style.width =
-        max > 0 ? ((count / max) * 100).toFixed(2) + "%" : "0%";
+      var value = rows[j].getAttribute("data-value");
+      var count = votes[value] || 0;
+      var share = now.base > 0 ? count / now.base : 0;
+      var width = prev ? share : now.max > 0 ? count / now.max : 0;
+      rows[j].querySelector(".lp-fill").style.width = (width * 100).toFixed(2) + "%";
       rows[j].querySelector(".lp-n").textContent = count;
-      rows[j].querySelector(".lp-pct").textContent =
-        (total > 0 ? Math.round((count / total) * 100) : 0) + "%";
-      rows[j].classList.toggle("lp-lead", max > 0 && count === max);
+      rows[j].querySelector(".lp-pct").textContent = Math.round(share * 100) + "%";
+      rows[j].classList.toggle("lp-lead", now.max > 0 && count === now.max);
+
+      var marker = rows[j].querySelector(".lp-prev");
+      var was = rows[j].querySelector(".lp-was");
+      if (prev) {
+        var then = before.base > 0 ? (prev.votes[value] || 0) / before.base : 0;
+        if (!marker) {
+          marker = document.createElement("span");
+          marker.className = "lp-prev";
+          rows[j].querySelector(".lp-track").appendChild(marker);
+        }
+        if (!was) {
+          was = document.createElement("span");
+          was.className = "lp-was";
+          rows[j].querySelector(".lp-label").appendChild(was);
+        }
+        marker.style.left = (then * 100).toFixed(2) + "%";
+        was.textContent = "round " + history.length + ": " + Math.round(then * 100) + "%";
+      } else {
+        if (marker) marker.parentNode.removeChild(marker);
+        if (was) was.parentNode.removeChild(was);
+      }
     }
+  }
+
+  // The classic chart gets the earlier round as a second, paler set of bars.
+  function syncChartRounds(canvas, history) {
+    var chart = canvas.chart;
+    if (!chart) return;
+    var prev = history && history.length ? history[history.length - 1] : null;
+    var datasets = chart.data.datasets;
+    if (!prev) {
+      if (datasets.length > 1) {
+        datasets.length = 1;
+        chart.options.plugins.legend.display = false;
+        chart.update();
+      }
+      return;
+    }
+    var pollId = canvas.getAttribute("data-poll");
+    var poll = (deckConfig().polls || {})[pollId];
+    if (!poll) return;
+    var data = poll.options.map(function (opt) {
+      return prev.votes[opt.value] || 0;
+    });
+    datasets[0].label = "Round " + (history.length + 1);
+    if (datasets.length < 2) {
+      datasets.push({
+        label: "Round " + history.length,
+        data: data,
+        backgroundColor: "rgba(150,150,150,0.45)",
+        borderColor: "rgba(110,110,110,0.8)",
+        borderWidth: 2,
+      });
+    } else {
+      datasets[1].label = "Round " + history.length;
+      datasets[1].data = data;
+    }
+    chart.options.plugins.legend.display = true;
+    chart.update();
   }
 
   document.addEventListener("received", function (event) {
     var content = event.content;
     if (!content || content.sender !== "poll-plugin") return;
-    if (content.type !== "results" || !content.votes) return;
+    if (content.type !== "results" || !content.votes || !LP.trusted(event)) return;
     var panels = panelsFor(content.poll);
     for (var i = 0; i < panels.length; i++) {
-      updatePanelBars(panels[i], content.votes);
+      updatePanelBars(panels[i], content.votes, content);
     }
+    var charts = document.querySelectorAll('canvas[data-chart][data-poll="' + content.poll + '"]');
+    for (var k = 0; k < charts.length; k++) syncChartRounds(charts[k], content.history);
   });
 
   // Results are hidden (results="hidden") until the answer is given or, for a
@@ -1056,19 +1938,19 @@
   // as given on the same terms as the green bar in the classic chart: reveal's
   // own `visible` class *and* the presenter having actually stepped to it.
   function syncPanel(panel) {
-    var pollId = panel.getAttribute("data-poll") || panel.getAttribute("data-likert");
+    var pollId = questionId(panel);
     var answer = panel.querySelector(".poll-answer");
     var given =
       !!answer &&
       answer.classList.contains("visible") &&
       revealedAnswers[pollId] !== undefined;
-    var correct = given ? answer.getAttribute("data-correct") : null;
+    var correct = given ? LP.correctSet(answer.getAttribute("data-correct")) : [];
 
     var rows = panel.querySelectorAll(".lp-row[data-value]");
     for (var i = 0; i < rows.length; i++) {
-      var value = rows[i].getAttribute("data-value");
-      rows[i].classList.toggle("lp-correct", given && value === correct);
-      rows[i].classList.toggle("lp-dim", given && value !== correct);
+      var right = correct.indexOf(rows[i].getAttribute("data-value")) !== -1;
+      rows[i].classList.toggle("lp-correct", given && right);
+      rows[i].classList.toggle("lp-dim", given && !right);
     }
 
     var reveal = panel.querySelector(".lp-reveal");
@@ -1078,9 +1960,7 @@
   }
 
   function syncAllPanels() {
-    var panels = document.querySelectorAll(
-      ".livepoll-question[data-poll], .livepoll-question[data-likert]"
-    );
+    var panels = document.querySelectorAll(".livepoll-question[data-results]");
     for (var i = 0; i < panels.length; i++) syncPanel(panels[i]);
   }
 
@@ -1162,45 +2042,41 @@
   }
 
   // The pill under the count: OFFLINE until this deck is in the room, then
-  // LIVE while this question is the active poll and CLOSED otherwise. Beside
-  // it, how many are in the room, when the relay says.
+  // LIVE while this question is the active poll and open, CLOSED otherwise.
+  // Beside it, how many are in the room and what share of them has answered.
   var PILL_TEXT = { live: "LIVE", closed: "CLOSED", offline: "OFFLINE" };
-  var roomSize = null;
 
   function updatePills() {
-    var online = !!(window.RevealSeminar && RevealSeminar.connected && RevealSeminar.connected());
+    var online = LP.connected();
+    var connected = LP.connectedCount();
     var panels = document.querySelectorAll(".livepoll-question");
     for (var i = 0; i < panels.length; i++) {
-      var id =
-        panels[i].getAttribute("data-poll") ||
-        panels[i].getAttribute("data-wordcloud") ||
-        panels[i].getAttribute("data-likert");
-      var state = !online ? "offline" : id === currentActivePoll ? "live" : "closed";
+      var id = questionId(panels[i]);
+      var board = panels[i].classList.contains("lp-qa-q");
+      var state = !online ? "offline" : board || (id === currentActivePoll && LP.isOpen(id)) ? "live" : "closed";
       var pill = panels[i].querySelector(".lp-pill");
-      if (pill) {
+      if (pill && pill.getAttribute("data-state") !== state) {
         pill.setAttribute("data-state", state);
         pill.textContent = PILL_TEXT[state];
       }
       var joined = panels[i].querySelector(".lp-joined");
-      if (joined) joined.textContent = online && roomSize !== null ? roomSize + " connected" : "";
+      if (joined) {
+        var text = "";
+        if (online && connected > 0) {
+          var counter = panels[i].querySelector(".lp-count-n");
+          var answered = counter ? Number(counter.textContent) || 0 : 0;
+          text = connected + " connected";
+          // words and questions are not people, so these get no rate
+          if (!panels[i].classList.contains("lp-wordcloud") && !board && answered > 0) {
+            text += " · " + Math.min(100, Math.round((answered / connected) * 100)) + "%";
+          }
+        }
+        if (joined.textContent !== text) joined.textContent = text;
+      }
     }
   }
 
-  // seminar.js passes the relay's lists through as they come; count either
-  // shape rather than guess which one this relay uses.
-  function memberCount(list) {
-    if (!list) return 0;
-    if (Array.isArray(list)) return list.length;
-    if (typeof list === "object") return Object.keys(list).length;
-    return 0;
-  }
-
-  document.addEventListener("participants", function (event) {
-    if (!event.content) return;
-    roomSize = memberCount(event.content.participants);
-    updatePills();
-  });
-  document.addEventListener("seminar", updatePills);
+  setInterval(updatePills, 1000);
 
   /* ------------------------------------------- full-screen QR (Shift+Q) */
 
@@ -1258,19 +2134,14 @@
 
   /* --------------------------------------------- automatic activation */
 
-  // What a slide is about: poll buttons, a results chart, or a word cloud.
+  // What a slide is about: poll buttons, a results chart, a word cloud, or
+  // any of the other question kinds.
   function pollOnSlide(slide) {
     if (!slide || !slide.querySelector) return null;
     var el = slide.querySelector(
-      ".poll[data-poll], canvas[data-chart][data-poll], .wordcloud[data-wordcloud], " +
-        ".likert[data-likert], canvas[data-chart][data-likert]"
+      QUESTION_SELECTOR + ", canvas[data-chart][data-poll], canvas[data-chart][data-likert]"
     );
-    if (!el) return null;
-    return (
-      el.getAttribute("data-poll") ||
-      el.getAttribute("data-wordcloud") ||
-      el.getAttribute("data-likert")
-    );
+    return el ? questionId(el) : null;
   }
 
   // Charts and clouds measure their container, which is meaningless while the
@@ -1352,6 +2223,9 @@
     for (var l = 0; l < scales.length; l++) {
       renderLikert(scales[l].getAttribute("data-likert"));
     }
+
+    // the other kinds measure and draw themselves
+    document.dispatchEvent(new CustomEvent("livepoll-slide", { detail: { slide: slide } }));
   }
 
   // Opening a poll or results slide makes that poll the live one. Leaving it
@@ -1367,74 +2241,58 @@
 
   // Send the active poll to a participant who joins after it was activated,
   // along with its answer if that has already been revealed.
+  // Announcements to that one participant: only a host can make them, which
+  // is what lets the phone believe them (see seminar.js, announceTo).
   document.addEventListener("welcome", function (event) {
-    if (currentActivePoll && event.content && event.content.user) {
-      var user = event.content.user.id;
-      var message = new CustomEvent("send");
-      message.content = {
+    if (!LP.hosting() || !currentActivePoll || !event.content || !event.content.user) return;
+    var user = event.content.user.id;
+    LP.sendTo(user, {
+      sender: "poll-control",
+      type: "activate-poll",
+      pollId: currentActivePoll,
+      session: LP.sessionId(),
+      round: LP.roundOf ? LP.roundOf(currentActivePoll) : 1,
+    });
+
+    if (likertState[currentActivePoll]) {
+      LP.sendTo(user, {
+        sender: "likert-plugin",
+        type: "counts",
+        likert: currentActivePoll,
+        counts: likertState[currentActivePoll].counts,
+        voters: likertState[currentActivePoll].voters,
+      });
+    }
+
+    if (cloudCounts[currentActivePoll]) {
+      LP.sendTo(user, {
+        sender: "wordcloud-plugin",
+        type: "counts",
+        cloud: currentActivePoll,
+        counts: cloudCounts[currentActivePoll],
+      });
+    }
+
+    if (!LP.isOpen(currentActivePoll)) {
+      LP.sendTo(user, { sender: "poll-control", type: "close-poll", pollId: currentActivePoll });
+    }
+
+    if (revealedAnswers[currentActivePoll] !== undefined) {
+      LP.sendTo(user, {
         sender: "poll-control",
-        recipient: user,
-        type: "activate-poll",
+        type: "reveal-answer",
         pollId: currentActivePoll,
-      };
-      document.dispatchEvent(message);
-
-      if (likertState[currentActivePoll]) {
-        var tally = new CustomEvent("send");
-        tally.content = {
-          sender: "likert-plugin",
-          recipient: user,
-          type: "counts",
-          likert: currentActivePoll,
-          counts: likertState[currentActivePoll].counts,
-          voters: likertState[currentActivePoll].voters,
-        };
-        document.dispatchEvent(tally);
-      }
-
-      if (cloudCounts[currentActivePoll]) {
-        var counts = new CustomEvent("send");
-        counts.content = {
-          sender: "wordcloud-plugin",
-          recipient: user,
-          type: "counts",
-          cloud: currentActivePoll,
-          counts: cloudCounts[currentActivePoll],
-        };
-        document.dispatchEvent(counts);
-      }
-
-      if (revealedAnswers[currentActivePoll] !== undefined) {
-        var answer = new CustomEvent("send");
-        answer.content = {
-          sender: "poll-control",
-          recipient: user,
-          type: "reveal-answer",
-          pollId: currentActivePoll,
-          correct: revealedAnswers[currentActivePoll],
-        };
-        document.dispatchEvent(answer);
-      }
+        correct: revealedAnswers[currentActivePoll],
+      });
     }
   });
 
-  // Answer a poll page that asks which poll is currently active.
+  // A poll page asks for the current state once it has joined (and again
+  // after a reconnect). Answer it alone, as a new arrival is answered.
   document.addEventListener("received", function (event) {
-    if (
-      event.content &&
-      event.content.sender === "poll-page" &&
-      event.content.type === "request-active-poll"
-    ) {
-      if (currentActivePoll && RevealSeminar.hosting()) {
-        var message = new CustomEvent("broadcast");
-        message.content = {
-          sender: "poll-control",
-          type: "activate-poll",
-          pollId: currentActivePoll,
-        };
-        document.dispatchEvent(message);
-      }
-    }
+    var content = event.content;
+    if (!content || content.sender !== "poll-page" || content.type !== "request-active-poll") return;
+    LP.sync(LP.socketOf(event));
   });
 
   /* --------------------------------------------------------- QR codes */
@@ -1534,9 +2392,10 @@
           : "white";
     }
 
-    var next = correctValue
+    var correct = LP.correctSet(correctValue);
+    var next = correct.length
       ? poll.options.map(function (opt) {
-          return opt.value === correctValue ? "#2e9e4f" : dataset._livepollBase;
+          return correct.indexOf(opt.value) !== -1 ? "#2e9e4f" : dataset._livepollBase;
         })
       : dataset._livepollBase;
 
@@ -1608,6 +2467,17 @@
     return el && el.classList && el.classList.contains("poll-answer");
   }
 
+  // For the kinds that draw their own answer (an estimate's line, a hotspot's
+  // circle) and for scoring: `livepoll-answer` with { id, shown }.
+  LP.answerShown = function (id) {
+    return revealedAnswers[id] !== undefined;
+  };
+
+  function answerChanged(id, shown) {
+    document.dispatchEvent(new CustomEvent("livepoll-answer", { detail: { id: id, shown: shown, correct: revealedAnswers[id] } }));
+    LP.hud.refresh();
+  }
+
   // reveal.js dispatches its events without bubbling, so they have to be taken
   // from Reveal itself rather than from document.
   function whenRevealReady(callback, attemptsLeft) {
@@ -1650,7 +2520,10 @@
     for (var i = 0; i < pollIds.length; i++) {
       var poll = recorded.polls[pollIds[i]];
       send({ sender: "poll-plugin", type: "voters", poll: pollIds[i], voters: poll.voters });
-      send({ sender: "poll-plugin", type: "results", poll: pollIds[i], votes: poll.votes });
+      send({
+        sender: "poll-plugin", type: "results", poll: pollIds[i], votes: poll.votes,
+        voters: poll.voters, history: poll.history || [],
+      });
     }
     var likertIds = Object.keys(recorded.likerts || {});
     for (var k = 0; k < likertIds.length; k++) {
@@ -1661,11 +2534,15 @@
     for (var j = 0; j < cloudIds.length; j++) {
       send({ sender: "wordcloud-plugin", type: "counts", cloud: cloudIds[j], counts: recorded.clouds[cloudIds[j]] });
     }
+    // estimates, rankings, hotspots, questions: each module replays its own
+    document.dispatchEvent(new CustomEvent("livepoll-replay", { detail: recorded }));
   }
 
   function initRevealHooks() {
     whenRevealReady(function (Reveal) {
       setTimeout(replayRecorded, 0); // after every other `ready` listener
+      // after the replay: restored results go on top of recorded ones
+      setTimeout(offerRestore, 50);
       Reveal.on("slidechanged", function () {
         autoActivateForCurrentSlide();
         refreshVisuals();
@@ -1690,6 +2567,17 @@
       Reveal.on("fragmentshown", syncRevealFragment);
       Reveal.on("fragmenthidden", syncRevealFragment);
 
+      // A round step (rounds="2"): stepping to it opens the next round, once.
+      // Stepping back does not take it back; the votes stay.
+      Reveal.on("fragmentshown", function (event) {
+        var fragment = event.fragment;
+        if (!fragment || !fragment.classList || !fragment.classList.contains("lp-round")) return;
+        if (!fragment.classList.contains("visible") || !LP.hosting() || !LP.newRound) return;
+        var id = fragment.getAttribute("data-poll");
+        var round = Number(fragment.getAttribute("data-round"));
+        if (LP.roundOf(id) < round) LP.newRound(id);
+      });
+
       Reveal.on("fragmentshown", function (event) {
         if (!isAnswerFragment(event.fragment)) return;
         // reveal also emits this while syncing its own state; only treat it as
@@ -1700,26 +2588,35 @@
         revealedAnswers[pollId] = correct;
         syncFragment(event.fragment);
         broadcastAnswer(pollId, correct);
+        answerChanged(pollId, true);
       });
 
       Reveal.on("fragmenthidden", function (event) {
-        if (!isAnswerFragment(event.fragment)) return;
-        var pollId = event.fragment.getAttribute("data-poll");
-        // The same answer may be written on a second slide; only forget it for
-        // late joiners once none of its copies is showing.
-        var others = answerFragments(pollId);
-        var stillShown = false;
-        for (var i = 0; i < others.length; i++) {
-          if (
-            others[i] !== event.fragment &&
-            others[i].classList.contains("visible")
-          ) {
-            stillShown = true;
-          }
-        }
-        if (!stillShown) delete revealedAnswers[pollId];
-        syncFragment(event.fragment);
+        withdrawHiddenAnswers();
+        if (isAnswerFragment(event.fragment)) syncFragment(event.fragment);
       });
+      // Going back a slide hides the fragments of the one you left without any
+      // event: reveal resets a slide ahead of you silently.
+      Reveal.on("slidechanged", withdrawHiddenAnswers);
+    });
+  }
+
+  // An answer counts as given while any copy of it is showing (the same answer
+  // may be written on a second slide). Once none is — stepped back, or gone
+  // back a slide after advancing too far — it is taken back everywhere: the
+  // phones drop it, and late joiners are no longer told it.
+  function withdrawHiddenAnswers() {
+    Object.keys(revealedAnswers).forEach(function (pollId) {
+      var copies = answerFragments(pollId);
+      for (var i = 0; i < copies.length; i++) {
+        if (copies[i].classList.contains("visible")) return;
+      }
+      delete revealedAnswers[pollId];
+      if (LP.hosting()) {
+        LP.broadcast({ sender: "poll-control", type: "hide-answer", pollId: pollId });
+      }
+      syncAnswerHighlight(pollId);
+      answerChanged(pollId, false);
     });
   }
 
@@ -1736,6 +2633,7 @@
     syncAllPanels(); // results="hidden" panels start hidden
     updatePills();
     initRevealHooks();
+    LP.hud.refresh();
 
     // Same as the .then() block postprocess.py used to splice into
     // Reveal.initialize: nothing is connected yet, so hide the elements that
