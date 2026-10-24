@@ -89,6 +89,23 @@
         color: #721c24;
       }
 
+      /* not in the presenter's room: no presenter yet, or they stopped */
+      #status.offline {
+        background: #ececf0;
+        color: #555;
+      }
+
+      #status.offline::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 8px;
+        border-radius: 50%;
+        background: #b42318;
+        vertical-align: 1px;
+      }
+
       #status.waiting {
         background: #cce5ff;
         color: #004085;
@@ -1071,7 +1088,7 @@
           <p>The presenter will activate a poll question soon. Please stand by...</p>
         </div>
       `;
-        updateStatus("Connected - Waiting for poll activation", "waiting");
+        updateStatus("Connected - waiting for the next question", "waiting");
         drawTimer();
       }
 
@@ -1925,6 +1942,12 @@
           } else if (c.type === "reveal-answer") {
             revealed[c.pollId] = c.correct;
             showAnswer(c.pollId, c.correct);
+          } else if (c.type === "refused") {
+            // the host already has an answer from this device for this one
+            if (active && active.id === c.pollId) {
+              updateStatus("Not counted: this device has already answered", "error");
+              note("⚠️ This device has already answered this question, so this answer was not counted.");
+            }
           } else if (c.type === "hide-answer") {
             // the presenter stepped back: the answer is not given after all
             delete revealed[c.pollId];
@@ -1963,7 +1986,17 @@
           function (error) {
             if (error) {
               if (String(error).includes("not found")) {
-                updateStatus("Waiting for presenter to start seminar...", "waiting");
+                // No room means no presenter: say so, rather than look connected.
+                // This page joins by itself the moment they start.
+                updateStatus("Not connected - the presenter hasn't started yet", "offline");
+                if (!pollContent.querySelector(".not-started")) {
+                  pollContent.innerHTML = `
+                    <div class="waiting-message not-started">
+                      <h2>⏳ Not started yet</h2>
+                      <p>The presenter hasn't started the live poll. Keep this page open: it connects by itself as soon as they do.</p>
+                    </div>`;
+                }
+                drawTimer();
                 setTimeout(attemptJoinRoom, 3000);
               } else {
                 updateStatus("Error joining poll: " + error, "error");
@@ -1997,7 +2030,7 @@
 
         // also after every reconnect: check in and join again
         socket.on("connect", function () {
-          updateStatus("Connected to server, joining poll...", "connecting");
+          updateStatus("Looking for the presenter...", "connecting");
           const username = "poll-" + Math.random().toString(36).substr(2, 9);
           socket.emit("checkin", username, function (error) {
             if (error) {
@@ -2017,7 +2050,7 @@
         socket.on("kicked_out", function () {
           joined = false;
           active = null;
-          updateStatus("The presenter ended the session", "waiting");
+          updateStatus("Not connected - the presenter ended the session", "offline");
           pollContent.innerHTML = `<div class="waiting-message"><h2>👋 That's all</h2><p>The presenter has closed the poll. Thanks for taking part!</p></div>`;
           setTimeout(attemptJoinRoom, 5000);
         });
