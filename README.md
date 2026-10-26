@@ -587,20 +587,39 @@ install.
 
 Nobody signs in and no names are asked for (bar an optional quiz nickname).
 Each browser keeps a random id, in `localStorage`, which is what stops a
-reload from voting twice; the presenting browser sees these ids, but they are
-not people's names. What `session.json` and the CSV say about who answered is
-set by `livepoll: ids:`
+reload from voting twice and lets someone upvote a question only once. The id
+expires 12 hours after it was last used, so each class sees a fresh one and a
+phone can't be recognised from one week to the next. The presenting browser
+sees these ids (and keeps them in its autosave), but they are not people's
+names.
+
+What `session.json` and the CSV say about who answered is set by
+`livepoll: ids:`
 
 | `ids:` | participants are | so you can |
 | --- | --- | --- |
 | `session` (default) | `p1`, `p2`, … in the order they first answered | follow one person through a class (did they change their mind?), not across classes |
-| `persistent` | a hash of the browser's id, salted with the venue | follow the same browser across the classes of a course |
 | `none` | not recorded | see totals and times only |
+| `persistent` (opt-in) | a hash of the browser's id, salted with the venue; the id no longer expires | follow the same browser across the classes of a course |
 
-Quiz nicknames are written into the leaderboard. If you mean to publish
-anything drawn from these files, check what your institution asks of you
-first; `persistent` ids combined with nicknames may well count as personal
-data.
+Comparing classes needs no ids at all: "30% got this wrong in week 1, 50% in
+week 5" comes from each session's totals, which every setting records.
+`persistent` is only for following the *same* people over time ("of those who
+got it wrong in week 1, 70% got it right in week 5"). It links answers across
+sessions, so with it on, the poll page tells participants that their device
+keeps the same random id from one session to the next.
+
+Quiz nicknames are written into the leaderboard. `persistent` ids, especially
+with nicknames, are likely to count as personal data (pseudonymous data under
+the GDPR, for instance).
+
+**Your responsibility.** Whether you may collect, keep, link or publish
+participants' answers, and what you must tell them, depends on the law and the
+rules that apply to you and your institution. That makes it the presenter's
+decision and the presenter's responsibility, including the choice of `ids:`.
+This extension and its documentation are provided as they are, without any
+warranty, and are not legal advice; the author accepts no liability for how
+they are used or for any data collected with them.
 
 ## Password
 
@@ -638,7 +657,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-2.0.4/`), with no cache-busting. If you change the
+version (`livepoll-2.0.5/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.

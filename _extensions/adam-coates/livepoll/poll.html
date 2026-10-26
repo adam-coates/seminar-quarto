@@ -56,6 +56,12 @@
         min-height: 1em;
       }
 
+      .id-notice {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 6px 0 10px;
+      }
+
       .me button {
         padding: 0 0 0 4px;
         border: none;
@@ -781,6 +787,10 @@
       <h1 id="pollTitle">Live Poll</h1>
       <div class="me" id="me"></div>
       <div id="status" class="connecting">Reading deck configuration...</div>
+      <p class="id-notice" id="idNotice" hidden>
+        The presenter compares results across sessions, so this device keeps the
+        same random ID from one session to the next. It does not include your name.
+      </p>
 
       <div class="tabs" id="tabs" role="tablist" hidden>
         <button type="button" role="tab" id="tabPoll" aria-selected="true">Poll<span class="badge" id="pollBadge"></span></button>
@@ -883,30 +893,36 @@
         }
       }
 
-      // One random id per browser, the same one the deck uses (same key): it
-      // is what stops a reload voting twice, and lets you upvote a question
-      // once. It is not your name and nothing here asks for it.
-      function deviceId() {
-        let id = null;
+      // One random id per browser, the same one the deck uses (same key, same
+      // format): it is what stops a reload voting twice, and lets you upvote a
+      // question once. It is not your name and nothing here asks for it. It
+      // lasts DEVICE_TTL after it was last used, so next week's class meets a
+      // stranger; only a deck that opts into `ids: persistent` keeps it.
+      const DEVICE_TTL = 12 * 3600 * 1000;
+      function deviceId(persistent) {
+        let stored = null;
         try {
-          id = localStorage.getItem("livepoll_device");
+          stored = JSON.parse(localStorage.getItem("livepoll_device"));
         } catch (e) {
-          /* below */
+          /* a bare string is an id from before ids expired: start afresh */
         }
+        let id = stored && typeof stored.id === "string" ? stored.id : null;
+        if (id && !persistent && !(Date.now() - stored.t < DEVICE_TTL)) id = null;
         if (!id) {
           const bytes = new Uint8Array(16);
           crypto.getRandomValues(bytes);
           const abc = "abcdefghijkmnpqrstuvwxyz23456789";
           id = Array.from(bytes, (b) => abc[b % abc.length]).join("");
-          try {
-            localStorage.setItem("livepoll_device", id);
-          } catch (e) {
-            /* a fresh one each load, then */
-          }
+        }
+        try {
+          localStorage.setItem("livepoll_device", JSON.stringify({ id, t: Date.now() }));
+        } catch (e) {
+          /* a fresh one each load, then */
         }
         return id;
       }
-      const device = deviceId();
+      // set once the deck's configuration says how long it should last
+      let device = null;
 
       function esc(text) {
         return String(text == null ? "" : text)
@@ -2091,6 +2107,11 @@
           room: cfg.room || cfg.url || location.host,
           hash: cfg.hash,
         };
+
+        device = deviceId(cfg.ids === "persistent");
+        // Participants are told when the presenter links their answers across
+        // sessions; it is the one setting that does.
+        document.getElementById("idNotice").hidden = cfg.ids !== "persistent";
 
         if (cfg.title) document.getElementById("pollTitle").textContent = cfg.title;
         if (cfg.qa !== false) {

@@ -3,5 +3,6 @@ project:
   render:
     - test.qmd
     - test2.qmd
+    - test3.qmd
   post-render:
     - _extensions/adam-coates/livepoll/copy-poll-page.lua

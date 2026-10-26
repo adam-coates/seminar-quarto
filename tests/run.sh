@@ -17,7 +17,7 @@ export OUT_DIR=${OUT_DIR:-$TESTS/out}
 
 # The test decks (tests/decks) are served on 8081, the repo's demo deck on
 # 8080; the relay listens on 4433. Both decks use the room password "test".
-DECK_SUITES=(polls kinds session misc rounds_quiz fixes baseline)
+DECK_SUITES=(polls kinds session misc rounds_quiz fixes baseline device)
 DEMO_SUITES=(print hide hostvote3 demo bar_off)
 HASH='$2a$05$PP2N6d07kWQNp3VLSn.w3OmfUd/fuVJ8U5vHdA3ku/hdRgMy3Vlp.' # bcrypt("test")
 

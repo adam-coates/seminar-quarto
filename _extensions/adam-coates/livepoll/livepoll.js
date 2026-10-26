@@ -98,20 +98,30 @@
   }
   LP.randomId = randomId;
 
-  // One per browser, shared with poll.html (same origin, same key): someone
-  // with both the deck and the poll page open is one person.
+  // One per browser, shared with poll.html (same origin, same key, same
+  // format): someone with both the deck and the poll page open is one person.
+  // It lasts DEVICE_TTL after it was last used, so next week's class meets a
+  // stranger; only a deck that opts into `ids: persistent` keeps it for good.
+  var DEVICE_TTL = 12 * 3600 * 1000;
   var memoryDevice = null;
   LP.deviceId = function () {
+    if (memoryDevice) return memoryDevice;
+    var persistent = LP.config().ids === "persistent";
+    var stored = null;
     try {
-      var id = localStorage.getItem("livepoll_device");
-      if (!id) {
-        id = randomId(16);
-        localStorage.setItem("livepoll_device", id);
-      }
-      return id;
+      stored = JSON.parse(localStorage.getItem("livepoll_device"));
     } catch (e) {
-      return memoryDevice || (memoryDevice = randomId(16));
+      /* a bare string is an id from before ids expired: start afresh */
     }
+    var id = stored && typeof stored.id === "string" ? stored.id : null;
+    if (id && !persistent && !(Date.now() - stored.t < DEVICE_TTL)) id = null;
+    memoryDevice = id || randomId(16);
+    try {
+      localStorage.setItem("livepoll_device", JSON.stringify({ id: memoryDevice, t: Date.now() }));
+    } catch (e) {
+      /* kept in memory for this page, then */
+    }
+    return memoryDevice;
   };
 
   // Same rule as poll.js: count people, not messages. The relay names the
