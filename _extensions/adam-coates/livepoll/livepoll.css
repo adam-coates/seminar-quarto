@@ -1465,6 +1465,90 @@
   stroke-width: 4px;
 }
 
+/* ----------------------------------------------------------------- sketch */
+
+.reveal .livepoll-question .lp-sketch {
+  position: relative;
+  flex: 1;
+  min-height: 240px;
+}
+
+.reveal .livepoll-question .lp-sketch-plot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.reveal .livepoll-question .lp-sketch .lp-empty {
+  position: absolute;
+  top: 40%;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.reveal .lp-sketch .lp-sk-grid {
+  stroke: color-mix(in srgb, currentColor 12%, transparent);
+  stroke-width: 1;
+}
+
+.reveal .lp-sketch .lp-sk-tick {
+  fill: currentColor;
+  opacity: 0.65;
+  font-size: 15px;
+}
+
+.reveal .lp-sketch .lp-sk-label {
+  fill: currentColor;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.reveal .lp-sketch .lp-sk-curve {
+  fill: none;
+  stroke: var(--lp-accent, #3b6fd4);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.reveal .lp-sketch .lp-sk-band {
+  fill: color-mix(in srgb, var(--lp-accent, #3b6fd4) 18%, transparent);
+  stroke: none;
+}
+
+.reveal .lp-sketch .lp-sk-median {
+  fill: none;
+  stroke: var(--lp-accent, #3b6fd4);
+  stroke-width: 5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.reveal .lp-sketch .lp-sk-answer {
+  fill: none;
+  stroke: var(--lp-good);
+  stroke-width: 5;
+  stroke-dasharray: 10 6;
+}
+
+.reveal .lp-sketch .lp-sk-answer-dot {
+  fill: var(--lp-good);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.reveal .lp-sketch .lp-sk-score {
+  fill: var(--lp-good);
+  font-weight: 800;
+  font-size: 18px;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 4px;
+}
+
 /* results hidden: the new kinds keep their frame, not their answers */
 .reveal .livepoll-question.lp-results-hidden .lp-est-bars,
 .reveal .livepoll-question.lp-results-hidden .lp-est-line,
@@ -1473,7 +1557,10 @@
 .reveal .livepoll-question.lp-results-hidden .lp-rank-pos,
 .reveal .livepoll-question.lp-results-hidden .lp-rank-stat,
 .reveal .livepoll-question.lp-results-hidden .lp-hot-heat,
-.reveal .livepoll-question.lp-results-hidden .lp-hot-marks {
+.reveal .livepoll-question.lp-results-hidden .lp-hot-marks,
+.reveal .livepoll-question.lp-results-hidden .lp-sk-curve,
+.reveal .livepoll-question.lp-results-hidden .lp-sk-band,
+.reveal .livepoll-question.lp-results-hidden .lp-sk-median {
   visibility: hidden;
 }
 

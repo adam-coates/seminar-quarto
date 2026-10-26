@@ -243,6 +243,11 @@
         margin-top: 18px;
       }
 
+      .submit.secondary {
+        background: #eee;
+        color: #333;
+      }
+
       .footer {
         margin-top: 26px;
         text-align: center;
@@ -591,6 +596,62 @@
         fill: rgba(46, 158, 79, 0.18);
         stroke: var(--good);
         stroke-width: 3;
+      }
+
+      /* ---- sketch ---- */
+
+      .sketch-frame {
+        border-radius: 10px;
+        box-shadow: 0 0 0 1px #ddd;
+        background: white;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .sketch-frame svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .sketch-frame .grid {
+        stroke: #eee;
+        stroke-width: 2;
+      }
+
+      .sketch-frame .tick {
+        fill: #777;
+        font-size: 40px;
+      }
+
+      .sketch-frame .axis-label {
+        fill: #444;
+        font-size: 42px;
+        font-weight: 600;
+      }
+
+      .sketch-frame .mine {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 7;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+
+      .sketch-frame .truth {
+        fill: none;
+        stroke: var(--good);
+        stroke-width: 7;
+        stroke-dasharray: 16 10;
+      }
+
+      .sketch-buttons {
+        display: flex;
+        gap: 10px;
+      }
+
+      .sketch-buttons button {
+        flex: 1;
       }
 
       /* ---- questions (Q&A) ---- */
@@ -1092,7 +1153,7 @@
       function kindOf(id) {
         const tables = {
           poll: cfg.polls, wordcloud: cfg.clouds, likert: cfg.likerts,
-          estimate: cfg.estimates, rank: cfg.ranks, hotspot: cfg.hotspots,
+          estimate: cfg.estimates, rank: cfg.ranks, hotspot: cfg.hotspots, sketch: cfg.sketches,
         };
         for (const kind in tables) if (tables[kind] && tables[kind][id]) return kind;
         return null;
@@ -1145,6 +1206,7 @@
           estimate: displayEstimate,
           rank: displayRank,
           hotspot: displayHotspot,
+          sketch: displaySketch,
         }[active.kind];
         if (!draw) {
           showWaitingMessage();
@@ -1589,6 +1651,167 @@
         svg.innerHTML = marks;
       }
 
+      /* ------------------------------------------------------ sketch */
+
+      // The chart is drawn in a fixed 1000×820 box, scaled to the phone (so
+      // its text is sized for that: about a third once on screen). The curve
+      // is s.points y-values at evenly spaced x, null where undrawn.
+      const SK = { w: 1000, h: 820, l: 150, r: 36, t: 30, b: 140 };
+
+      function sketchScales(s) {
+        const pw = SK.w - SK.l - SK.r, ph = SK.h - SK.t - SK.b;
+        return {
+          pw, ph,
+          X: (i) => SK.l + (pw * i) / (s.points - 1),
+          XV: (x) => SK.l + (pw * (x - s.x[0])) / (s.x[1] - s.x[0]),
+          Y: (y) => SK.t + ph * (1 - (y - s.y[0]) / (s.y[1] - s.y[0])),
+        };
+      }
+
+      function niceStep(span) {
+        const raw = span / 5, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+        return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
+      }
+
+      function sketchAxes(s) {
+        const { pw, ph, XV, Y } = sketchScales(s);
+        let out = "";
+        const sx = niceStep(s.x[1] - s.x[0]), sy = niceStep(s.y[1] - s.y[0]);
+        for (let v = Math.ceil(s.x[0] / sx) * sx; v <= s.x[1] + 1e-9; v += sx) {
+          out += `<line class="grid" x1="${XV(v)}" x2="${XV(v)}" y1="${SK.t}" y2="${SK.t + ph}"/>` +
+            `<text class="tick" x="${XV(v)}" y="${SK.t + ph + 50}" text-anchor="middle">${esc(numberText(v))}</text>`;
+        }
+        for (let v = Math.ceil(s.y[0] / sy) * sy; v <= s.y[1] + 1e-9; v += sy) {
+          out += `<line class="grid" x1="${SK.l}" x2="${SK.l + pw}" y1="${Y(v)}" y2="${Y(v)}"/>` +
+            `<text class="tick" x="${SK.l - 14}" y="${Y(v) + 14}" text-anchor="end">${esc(numberText(v))}</text>`;
+        }
+        if (s.xLabel) out += `<text class="axis-label" x="${SK.l + pw / 2}" y="${SK.h - 22}" text-anchor="middle">${esc(s.xLabel)}</text>`;
+        if (s.yLabel) out += `<text class="axis-label" transform="rotate(-90)" x="${-(SK.t + ph / 2)}" y="40" text-anchor="middle">${esc(s.yLabel)}</text>`;
+        return out;
+      }
+
+      // a curve as polylines, one per stretch without gaps
+      function sketchLines(curve, s, cls) {
+        const { X, Y } = sketchScales(s);
+        const lines = [];
+        let run = [];
+        curve.forEach((v, i) => {
+          if (v === null) {
+            if (run.length > 1) lines.push(run);
+            run = [];
+          } else run.push(`${X(i).toFixed(1)},${Y(v).toFixed(1)}`);
+        });
+        if (run.length > 1) lines.push(run);
+        return lines.map((r) => `<polyline class="${cls}" points="${r.join(" ")}"/>`).join("");
+      }
+
+      function sketchTruth(s) {
+        const { XV, Y } = sketchScales(s);
+        return `<polyline class="truth" points="${s.answer.map((p) => `${XV(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}"/>`;
+      }
+
+      // average distance from the real data where both exist (same as the deck's)
+      function sketchError(curve, s) {
+        let sum = 0, n = 0;
+        curve.forEach((y, i) => {
+          if (y === null) return;
+          const x = s.x[0] + ((s.x[1] - s.x[0]) * i) / (s.points - 1);
+          for (let k = 1; k < s.answer.length; k++) {
+            const a = s.answer[k - 1], b = s.answer[k];
+            if (x >= a[0] && x <= b[0]) {
+              const want = b[0] === a[0] ? a[1] : a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0]);
+              sum += Math.abs(y - want);
+              n++;
+              break;
+            }
+          }
+        });
+        return n ? sum / n : null;
+      }
+
+      function drawSketch(id, curve, truth) {
+        const s = cfg.sketches[id];
+        const svg = document.getElementById("sketchSvg");
+        if (!svg) return;
+        svg.innerHTML = sketchAxes(s) + (truth ? sketchTruth(s) : "") + sketchLines(curve, s, "mine");
+      }
+
+      function displaySketch(id) {
+        const s = cfg.sketches[id];
+        pollContent.innerHTML = `
+          <div class="poll-question">${esc(s.question)}</div>
+          <div class="sketch-frame" id="sketchFrame">
+            <svg id="sketchSvg" viewBox="0 0 ${SK.w} ${SK.h}"></svg>
+          </div>
+          <div class="sketch-buttons">
+            <button type="button" class="submit secondary" id="sketchClear">Clear</button>
+            <button type="button" class="submit" id="sketchSubmit" disabled>Submit</button>
+          </div>`;
+        const saved = myAnswer(id);
+        let curve = saved || new Array(s.points).fill(null);
+        drawSketch(id, curve);
+        if (saved) {
+          disableInputs();
+          updateStatus("You already answered this one.", "waiting");
+          note("✅ Your sketch has been recorded.");
+          return;
+        }
+        const svg = document.getElementById("sketchSvg");
+        const submit = document.getElementById("sketchSubmit");
+        let last = null; // the index drawn last in this stroke
+        // where a touch is, as an index along x and a value on y
+        const at = (evt) => {
+          const box = svg.getBoundingClientRect();
+          const { pw, ph } = sketchScales(s);
+          const px = ((evt.clientX - box.left) / box.width) * SK.w;
+          const py = ((evt.clientY - box.top) / box.height) * SK.h;
+          const i = Math.round(((px - SK.l) / pw) * (s.points - 1));
+          const y = s.y[0] + (1 - (py - SK.t) / ph) * (s.y[1] - s.y[0]);
+          return { i: Math.max(0, Math.min(s.points - 1, i)), y: Math.max(s.y[0], Math.min(s.y[1], y)) };
+        };
+        const paint = (evt) => {
+          const p = at(evt);
+          // a fast stroke skips columns: fill them in on a straight line
+          if (last && last.i !== p.i) {
+            const step = p.i > last.i ? 1 : -1;
+            for (let i = last.i + step; i !== p.i; i += step) {
+              curve[i] = last.y + ((p.y - last.y) * (i - last.i)) / (p.i - last.i);
+            }
+          }
+          curve[p.i] = p.y;
+          last = p;
+          drawSketch(id, curve);
+          const drawn = curve.filter((v) => v !== null).length;
+          submit.disabled = drawn < 2;
+          if (drawn >= 2) updateStatus("Redraw any part, or submit", "connected");
+        };
+        svg.addEventListener("pointerdown", (evt) => {
+          if (hasVoted(id)) return;
+          svg.setPointerCapture(evt.pointerId);
+          last = null;
+          paint(evt);
+        });
+        svg.addEventListener("pointermove", (evt) => {
+          if (svg.hasPointerCapture(evt.pointerId)) paint(evt);
+        });
+        svg.addEventListener("pointerup", () => (last = null));
+        document.getElementById("sketchClear").addEventListener("click", () => {
+          curve = new Array(s.points).fill(null);
+          submit.disabled = true;
+          drawSketch(id, curve);
+          updateStatus("Draw your guess across the chart", "connected");
+        });
+        submit.addEventListener("click", () => {
+          if (!requireJoined() || !isOpen() || hasVoted(id)) return;
+          const rounded = curve.map((v) => (v === null ? null : Math.round(v * 1000) / 1000));
+          send({ sender: "sketch", type: "answer", id: id, curve: rounded });
+          markVoted(id, 1, rounded);
+          disableInputs();
+          updateStatus("Thanks — your sketch was sent", "connected");
+        });
+        updateStatus("Draw your guess across the chart", "connected");
+      }
+
       /* ------------------------------------------------------- answers */
 
       // Shown only when the presenter reveals it, never before.
@@ -1630,6 +1853,18 @@
             verdict = `<div class="verdict">You said ${esc(numberText(mine) + unit)}: ${
               off === 0 ? "spot on" : esc(numberText(Math.abs(off))) + (off > 0 ? " too high" : " too low")
             }</div>`;
+          }
+        } else if (kind === "sketch") {
+          const s = cfg.sketches[id];
+          if (!Array.isArray(s.answer)) return;
+          const mine = myAnswer(id);
+          drawSketch(id, mine || new Array(s.points).fill(null), true);
+          text = "the dashed green line";
+          if (mine) {
+            const off = sketchError(mine, s);
+            verdict = off !== null && off <= s.tolerance
+              ? '<div class="verdict right">✅ Close: you were off by ' + esc(numberText(off)) + " on average</div>"
+              : '<div class="verdict wrong">❌ Off by ' + (off === null ? "—" : esc(numberText(off))) + " on average</div>";
           }
         } else if (kind === "hotspot") {
           const h = cfg.hotspots[id];
@@ -2099,6 +2334,7 @@
         cfg.estimates = cfg.estimates || {};
         cfg.ranks = cfg.ranks || {};
         cfg.hotspots = cfg.hotspots || {};
+        cfg.sketches = cfg.sketches || {};
 
         // Mirror seminar.js: venue falls back to the host, room to the venue.
         config = {

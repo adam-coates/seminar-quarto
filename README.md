@@ -19,8 +19,9 @@ deck's front matter is all the configuration there is.
 - **Peer instruction**: ask the same poll again after a discussion
   (`rounds="2"`); the slide shows where round 1 was beside round 2.
 - **Estimates** (a number: histogram, median, the answer as a line),
-  **rankings** (put items in order) and **hotspots** (tap a point on an
-  image: a heat map of the taps).
+  **rankings** (put items in order), **hotspots** (tap a point on an
+  image: a heat map of the taps) and **draw your guess** (sketch a curve: every
+  curve, the class median, then the real data).
 - **Word clouds**: words animate and grow as they are submitted.
 - **Rating scales (likert)**: statements rated agree–disagree or on a numeric
   scale, shown as diverging bars or histograms.
@@ -294,8 +295,30 @@ People tap a point on the image; the slide shows a heat map of the taps.
 and height, its radius as a fraction of the width — drawn when the answer is
 revealed, with how many taps fell inside it.
 
-Estimates, rankings and hotspots are always drawn in the embedded layout, and
-a `.poll-results for="…"` div draws one on another slide.
+### Draw your guess
+
+```markdown
+::: {.sketch #rt x="20,80" y="200,600" x-label="Age" y-label="Reaction time (ms)" answer="20:250, 40:280, 60:340, 80:450"}
+How does reaction time change with age?
+:::
+```
+
+People draw a curve with a finger across an empty chart (`x` and `y` are its
+ranges). The slide overlays every curve faintly, with the class's median as a
+bold line and a band for the middle half of the answers. `answer="x:y, …"` is
+the real data, drawn as a dashed line when the answer is revealed, with how
+many curves came close; each phone then sees its own curve against it.
+
+| attribute | default | meaning |
+| --- | --- | --- |
+| `x`, `y` | (required) | the axes' ranges, `"min,max"` |
+| `x-label`, `y-label` | | axis titles |
+| `answer` | | the real data as `x:y` points, joined by straight lines |
+| `tolerance` | `10%` | how far off a curve may be on average and still count as close (and score, in a quiz): in y units, or `%` of the y range |
+| `points` | `40` | how many x positions a curve is sampled at (10–100) |
+
+Estimates, rankings, hotspots and sketches are always drawn in the embedded
+layout, and a `.poll-results for="…"` div draws one on another slide.
 
 ### Timers
 
@@ -393,7 +416,7 @@ question's answer is revealed, each right answer scores 1000 points — on a
 timed question, from 1000 for an instant answer down to 500 at the bell — and
 every phone is told its result, total and place. What counts as right: a
 poll's marked option(s), an estimate within its `tolerance`, a tap inside a
-hotspot's circle. A `.leaderboard` slide shows the top ten (`top="5"` for
+hotspot's circle, a sketch within its `tolerance` of the real data. A `.leaderboard` slide shows the top ten (`top="5"` for
 fewer):
 
 ```markdown
@@ -591,9 +614,9 @@ set, word clouds drawn. No server is needed to view it.
 
 Since 2.0 the file also has every response with its time (`responses`),
 when each question opened (`opened`), the rounds of a poll asked more than
-once, the raw answers to estimates, rankings and hotspots, the audience's
+once, the raw answers to estimates, rankings, hotspots and sketches, the audience's
 questions, the quiz leaderboard, and the signals and reactions with the slide
-they came on. Estimates, rankings, hotspots, rounds, questions and the
+they came on. Estimates, rankings, hotspots, sketches, rounds, questions and the
 leaderboard are replayed too.
 
 **Download CSV** in the Live poll tab gives the responses as a table, one row
@@ -706,7 +729,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-2.0.5/`), with no cache-busting. If you change the
+version (`livepoll-2.0.7/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.

@@ -11,6 +11,8 @@
 **              most), the bars sliding as the order changes
 **   .hotspot   tap a point on an image: a heat map of the taps, and the
 **              answer as a circle
+**   .sketch    draw your guess: every curve faintly, the class's median
+**              and middle half, and the real data once it is revealed
 ******************************************************************/
 
 (function () {
@@ -23,9 +25,11 @@
       return setTimeout(cb, 16);
     };
 
+  // each kind's table in the deck's config, and in session.json
+  var TABLES = { estimate: "estimates", rank: "ranks", hotspot: "hotspots", sketch: "sketches" };
+
   function def(kind, id) {
-    var table = { estimate: "estimates", rank: "ranks", hotspot: "hotspots" }[kind];
-    return (LP.config()[table] || {})[id] || null;
+    return (LP.config()[TABLES[kind]] || {})[id] || null;
   }
 
   function els(kind, id) {
@@ -115,7 +119,7 @@
 
     // session.json, replayed by livepoll.lua: the raw answers, re-tallied
     document.addEventListener("livepoll-replay", function (event) {
-      var recorded = (event.detail || {})[kind + "s"] || {};
+      var recorded = (event.detail || {})[TABLES[kind]] || {};
       Object.keys(recorded).forEach(function (id) {
         var d = def(kind, id);
         if (!d) return;
@@ -550,6 +554,181 @@
           hits + " of " + t.points.length + " inside</text>";
       }
       svg.innerHTML = marks;
+    },
+  });
+
+  /* ---------------------------------------------------------- sketch */
+
+  // A curve is d.points y-values at evenly spaced x across d.x, null where
+  // the participant drew nothing.
+  function sketchX(d, i) {
+    return d.x[0] + ((d.x[1] - d.x[0]) * i) / (d.points - 1);
+  }
+
+  // The answer's y at x, by straight lines between its points; null outside it.
+  function answerAt(answer, x) {
+    for (var i = 1; i < answer.length; i++) {
+      var a = answer[i - 1], b = answer[i];
+      if (x >= a[0] && x <= b[0]) return b[0] === a[0] ? a[1] : a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0]);
+    }
+    return null;
+  }
+
+  // How far a curve is from the answer, on average, where both exist (y units);
+  // null when they never overlap.
+  LP.sketchError = function (curve, d) {
+    if (!Array.isArray(d.answer) || d.answer.length < 2) return null;
+    var sum = 0, n = 0;
+    curve.forEach(function (y, i) {
+      if (y === null) return;
+      var want = answerAt(d.answer, sketchX(d, i));
+      if (want === null) return;
+      sum += Math.abs(y - want);
+      n++;
+    });
+    return n ? sum / n : null;
+  };
+
+  function quantile(sorted, q) {
+    if (!sorted.length) return null;
+    var pos = (sorted.length - 1) * q;
+    var lo = Math.floor(pos), hi = Math.ceil(pos);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+  }
+
+  // a polyline's points, broken into runs where the curve has gaps
+  function runs(values, X, Y) {
+    var out = [], run = [];
+    values.forEach(function (v, i) {
+      if (v === null || v === undefined) {
+        if (run.length) out.push(run);
+        run = [];
+      } else run.push(X(i).toFixed(1) + "," + Y(v).toFixed(1));
+    });
+    if (run.length) out.push(run);
+    return out;
+  }
+
+  register("sketch", {
+    unit: "sketches",
+    empty: function () {
+      return { curves: [] };
+    },
+    asAnswer: function (value) {
+      return { curve: value };
+    },
+    check: function (content, d) {
+      var c = content.curve;
+      if (!Array.isArray(c) || c.length !== d.points) return null;
+      var out = [], drawn = 0;
+      for (var i = 0; i < c.length; i++) {
+        if (c[i] === null) {
+          out.push(null);
+          continue;
+        }
+        var y = Number(c[i]);
+        if (typeof c[i] !== "number" || !isFinite(y)) return null;
+        y = Math.max(d.y[0], Math.min(d.y[1], y));
+        out.push(Math.round(y * 1000) / 1000);
+        drawn++;
+      }
+      return drawn >= 2 ? out : null;
+    },
+    add: function (t, curve) {
+      t.curves.push(curve);
+    },
+    count: function (t) {
+      return t.curves.length;
+    },
+    wire: function (t) {
+      return { curves: t.curves };
+    },
+    unwire: function (content) {
+      return { curves: Array.isArray(content.curves) ? content.curves : [] };
+    },
+    raw: function (t) {
+      return t.curves.slice();
+    },
+    draw: function (box, t, d, id) {
+      var svg = box.querySelector(".lp-sketch-plot");
+      var w = box.clientWidth, h = box.clientHeight;
+      if (!svg || !w || !h) return; // not on screen
+      var empty = box.querySelector(".lp-empty");
+      if (empty) empty.hidden = t.curves.length > 0;
+      var m = { l: 64, r: 16, t: 12, b: d.xLabel ? 56 : 34 };
+      if (d.yLabel) m.l += 22;
+      var pw = w - m.l - m.r, ph = h - m.t - m.b;
+      var X = function (i) { return m.l + (pw * i) / (d.points - 1); };
+      var XV = function (x) { return m.l + (pw * (x - d.x[0])) / (d.x[1] - d.x[0]); };
+      var Y = function (y) { return m.t + ph * (1 - (y - d.y[0]) / (d.y[1] - d.y[0])); };
+      var parts = [];
+
+      // axes and ticks
+      var tick = function (lo, hi, at, horizontal) {
+        var step = niceStep(hi - lo), out = [];
+        for (var v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) {
+          var p = at(v).toFixed(1);
+          out.push(horizontal
+            ? '<line class="lp-sk-grid" x1="' + p + '" x2="' + p + '" y1="' + m.t + '" y2="' + (m.t + ph) + '"/>' +
+              '<text class="lp-sk-tick" x="' + p + '" y="' + (m.t + ph + 22) + '" text-anchor="middle">' + numberText(v) + "</text>"
+            : '<line class="lp-sk-grid" x1="' + m.l + '" x2="' + (m.l + pw) + '" y1="' + p + '" y2="' + p + '"/>' +
+              '<text class="lp-sk-tick" x="' + (m.l - 8) + '" y="' + p + '" dy="0.35em" text-anchor="end">' + numberText(v) + "</text>");
+        }
+        return out.join("");
+      };
+      parts.push(tick(d.x[0], d.x[1], XV, true), tick(d.y[0], d.y[1], Y, false));
+      if (d.xLabel) parts.push('<text class="lp-sk-label" x="' + (m.l + pw / 2) + '" y="' + (h - 8) + '" text-anchor="middle">' + LP.escape(d.xLabel) + "</text>");
+      if (d.yLabel) parts.push('<text class="lp-sk-label" transform="rotate(-90)" x="' + -(m.t + ph / 2) + '" y="18" text-anchor="middle">' + LP.escape(d.yLabel) + "</text>");
+
+      // every curve, fainter the more there are
+      var opacity = Math.max(0.08, Math.min(0.5, 2 / Math.sqrt(t.curves.length || 1)));
+      t.curves.forEach(function (c) {
+        runs(c, X, Y).forEach(function (r) {
+          parts.push('<polyline class="lp-sk-curve" style="opacity:' + opacity.toFixed(2) + '" points="' + r.join(" ") + '"/>');
+        });
+      });
+
+      // the class: median and middle half, where at least two drew
+      if (t.curves.length >= 2) {
+        var med = [], q1 = [], q3 = [];
+        for (var i = 0; i < d.points; i++) {
+          var col = t.curves.map(function (c) { return c[i]; })
+            .filter(function (v) { return v !== null && v !== undefined; })
+            .sort(function (a, b) { return a - b; });
+          var enough = col.length >= 2;
+          med.push(enough ? quantile(col, 0.5) : null);
+          q1.push(enough ? quantile(col, 0.25) : null);
+          q3.push(enough ? quantile(col, 0.75) : null);
+        }
+        // the band: along q3 and back along q1, for each stretch with values
+        // (the quartiles and the median have gaps in the same places)
+        var top = runs(q3, X, Y), bottom = runs(q1, X, Y);
+        top.forEach(function (r, k) {
+          parts.push('<polygon class="lp-sk-band" points="' + r.concat(bottom[k].slice().reverse()).join(" ") + '"/>');
+        });
+        runs(med, X, Y).forEach(function (r) {
+          parts.push('<polyline class="lp-sk-median" points="' + r.join(" ") + '"/>');
+        });
+      }
+
+      // the real data, once revealed
+      if (Array.isArray(d.answer) && d.answer.length >= 2 && LP.answerShown(id)) {
+        var pts = d.answer.map(function (p) { return XV(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); });
+        parts.push('<polyline class="lp-sk-answer" points="' + pts.join(" ") + '"/>');
+        d.answer.forEach(function (p) {
+          parts.push('<circle class="lp-sk-answer-dot" cx="' + XV(p[0]).toFixed(1) + '" cy="' + Y(p[1]).toFixed(1) + '" r="5"/>');
+        });
+        if (t.curves.length) {
+          var close = t.curves.filter(function (c) {
+            var e = LP.sketchError(c, d);
+            return e !== null && e <= d.tolerance;
+          }).length;
+          parts.push('<text class="lp-sk-score" x="' + (m.l + pw - 6) + '" y="' + (m.t + 20) + '" text-anchor="end">' +
+            close + " of " + t.curves.length + " close</text>");
+        }
+      }
+      svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+      svg.innerHTML = parts.join("");
     },
   });
 
