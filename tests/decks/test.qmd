@@ -43,7 +43,7 @@ livepoll:
 
 ## Peer instruction
 
-::: {.poll #peer rounds="2" timer="20"}
+::: {.poll #peer rounds="2" timer="90"}
 A p-value of 0.03 means:
 
 - [ ] 3% chance H0 is true

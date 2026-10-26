@@ -48,7 +48,9 @@ const toast = (p) => p.$eval("#toast", (e) => e.textContent);
     await deck.evaluate(() => { const t = document.querySelector('.lp-timer[data-timer="quick"]'); });
     const host = deck;
     const a = early;
-    await gotoSlide(host, "Peer instruction"); // 20 s timer, rounds: 2, answer B
+    // 90 s timer (long enough that a slow CI machine never sees it expire
+    // mid-test, which would reveal the answer early), rounds: 2, answer B
+    await gotoSlide(host, "Peer instruction");
     const b = await openPhone(browser);
     await b.waitForSelector("#nickInput"); await b.type("#nickInput", "Late Bo"); await b.click("#nickForm button[type=submit]");
     await sleep(1200);
