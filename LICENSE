@@ -1,0 +1,38 @@
+MIT License
+
+Copyright (c) 2024-2026 Adam Coates
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+Third-party components
+
+These files are by other authors, also under the MIT License, and keep their
+own copyright notices:
+
+- _extensions/adam-coates/livepoll/seminar.js, poll.js and chart.js: based on
+  the seminar, poll and chart plugins of reveal.js-plugins,
+  Copyright (c) Asvin Goel (https://github.com/rajgoel/reveal.js-plugins)
+- _extensions/adam-coates/livepoll/qrcode.js: QR Code Generator,
+  Copyright (c) 2009 Kazuhiko Arase
+- _extensions/adam-coates/livepoll/vendor/: socket.io-client, Chart.js and
+  the reveal.js-plugins poll stylesheet; licence texts in vendor/licenses/
+- tests/relay/server.js: the seminar relay server,
+  Copyright (c) 2021 Asvin Goel; licence text in tests/relay/LICENSE

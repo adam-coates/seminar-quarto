@@ -618,8 +618,9 @@ participants' answers, and what you must tell them, depends on the law and the
 rules that apply to you and your institution. That makes it the presenter's
 decision and the presenter's responsibility, including the choice of `ids:`.
 This extension and its documentation are provided as they are, without any
-warranty, and are not legal advice; the author accepts no liability for how
-they are used or for any data collected with them.
+warranty (see the [MIT License](LICENSE)), and are not legal advice; the
+author accepts no liability for how they are used or for any data collected
+with them.
 
 ## Password
 
@@ -672,3 +673,8 @@ on every pull request and push to `master`.
 
 The bundled libraries in `vendor/` are checked for new releases weekly; an
 update arrives as a pull request with the tests already run on it.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Some files are by other authors, also under the
+MIT License; LICENSE lists them.
