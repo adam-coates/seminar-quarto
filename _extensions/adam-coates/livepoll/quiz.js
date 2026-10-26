@@ -9,7 +9,7 @@
 **
 ** What counts as right: a poll's marked option(s) (all of them, exactly,
 ** when it takes several); an estimate within its tolerance="…"; a tap inside
-** a hotspot's answer circle. Rating scales, clouds and rankings are opinions
+** a hotspot's answer circle; a sketch within its tolerance of the real data. Rating scales, clouds and rankings are opinions
 ** and score nothing.
 ******************************************************************/
 
@@ -94,7 +94,7 @@
   document.addEventListener("livepoll-response", function (event) {
     if (!enabled()) return;
     var r = event.detail;
-    if (r.kind !== "poll" && r.kind !== "estimate" && r.kind !== "hotspot") return;
+    if (r.kind !== "poll" && r.kind !== "estimate" && r.kind !== "hotspot" && r.kind !== "sketch") return;
     var list = answers[r.id] || (answers[r.id] = []);
     list.push({ who: r.who, value: r.value, t: r.t, round: r.round || 1 });
     player(r.who).answered++;
@@ -134,6 +134,13 @@
       var aspect = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 1;
       return LP.hotspotHit(value, h.answer, aspect);
     }
+    if (kind === "sketch") {
+      // close enough on average to the real data, where the two overlap
+      var k = (cfg.sketches || {})[id];
+      if (!k || !Array.isArray(k.answer)) return null;
+      var off = LP.sketchError(value, k);
+      return off !== null && off <= k.tolerance + 1e-9;
+    }
     return null;
   }
 
@@ -153,6 +160,7 @@
     if (kind === "poll") return LP.correctSet(((cfg.polls || {})[id] || {}).correct).length > 0;
     if (kind === "estimate") return tolerance((cfg.estimates || {})[id]) !== null;
     if (kind === "hotspot") return Array.isArray(((cfg.hotspots || {})[id] || {}).answer);
+    if (kind === "sketch") return Array.isArray(((cfg.sketches || {})[id] || {}).answer);
     return false;
   }
 

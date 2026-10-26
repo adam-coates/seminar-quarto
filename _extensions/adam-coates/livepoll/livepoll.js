@@ -646,7 +646,7 @@
     var cfg = deckConfig();
     var tables = {
       poll: cfg.polls, wordcloud: cfg.clouds, likert: cfg.likerts,
-      estimate: cfg.estimates, rank: cfg.ranks, hotspot: cfg.hotspots,
+      estimate: cfg.estimates, rank: cfg.ranks, hotspot: cfg.hotspots, sketch: cfg.sketches,
     };
     for (var kind in tables) if (tables[kind] && tables[kind][id]) return kind;
     return null;
@@ -958,7 +958,7 @@
   // Every question element on the slides, of whatever kind, by its id.
   var QUESTION_SELECTOR =
     ".poll[data-poll], .wordcloud[data-wordcloud], .likert[data-likert], " +
-    ".lp-estimate[data-estimate], .lp-rank[data-rank], .lp-hotspot[data-hotspot]";
+    ".lp-estimate[data-estimate], .lp-rank[data-rank], .lp-hotspot[data-hotspot], .lp-sketch[data-sketch]";
 
   function questionId(el) {
     return (
@@ -967,7 +967,8 @@
       el.getAttribute("data-likert") ||
       el.getAttribute("data-estimate") ||
       el.getAttribute("data-rank") ||
-      el.getAttribute("data-hotspot")
+      el.getAttribute("data-hotspot") ||
+      el.getAttribute("data-sketch")
     );
   }
   LP.questionId = questionId;

@@ -26,3 +26,9 @@ livepoll:
 
 ::: {.qa}
 :::
+
+## Draw your guess
+
+::: {.sketch #rt x="20,80" y="200,600" x-label="Age" y-label="Reaction time (ms)" answer="20:250, 40:280, 60:340, 80:450"}
+How does reaction time change with age?
+:::

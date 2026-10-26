@@ -657,10 +657,15 @@ end
 --
 --     ![](scatter.png)
 --     :::
+--
+--     ::: {.sketch #rt x="20,80" y="200,600" answer="20:250, 50:300, 80:450"}
+--     How does reaction time change with age?
+--     :::
 
 local estimates, estimate_order = {}, {}
 local ranks, rank_order = {}, {}
 local hotspots, hotspot_order = {}, {}
+local sketches, sketch_order = {}, {}
 local qa_boards = 0       -- how many .qa slides; Q&A runs whether or not there is one
 local leaderboards = 0
 
@@ -847,6 +852,68 @@ local function collect_hotspot(el)
     answer = answer,
     results = results_attr(el, id),
     qr = truthy(el.attributes["qr"]) ~= false,
+  })
+  return settled(el, id)
+end
+
+-- "lo,hi" as two numbers, lo < hi
+local function range_attr(text)
+  if not text then return nil end
+  local lo, hi = text:match("^%s*(-?[%d.]+)%s*,%s*(-?[%d.]+)%s*$")
+  lo, hi = tonumber(lo), tonumber(hi)
+  if lo and hi and lo < hi then return { lo, hi } end
+  return nil
+end
+
+-- Draw your guess: each phone draws a curve over the x range, sent as
+-- `points` y-values at evenly spaced x (null where nothing was drawn). The
+-- deck overlays every curve with the class's median, and the answer (the real
+-- data, answer="x:y, x:y, ...") as the answer step.
+local function collect_sketch(el)
+  if not el.classes:includes("sketch") then return nil end
+  local id = settle_id(el, "sketch")
+  local a = el.attributes
+  local x, y = range_attr(a.x), range_attr(a.y)
+  if not x or not y then
+    quarto.log.warning("livepoll: sketch '" .. id .. "' needs x=\"min,max\" and y=\"min,max\" (min < max); skipping.")
+    return nil
+  end
+  local question, show = question_of(el, id)
+  local points = math.floor(tonumber(a.points or "") or 40)
+  if points < 10 or points > 100 then points = 40 end
+  local answer = nil
+  if a.answer then
+    answer = {}
+    for px, py in a.answer:gmatch("(-?[%d.]+)%s*:%s*(-?[%d.]+)") do
+      answer[#answer + 1] = { tonumber(px), tonumber(py) }
+    end
+    table.sort(answer, function(p, q) return p[1] < q[1] end)
+    if #answer < 2 then
+      quarto.log.warning("livepoll: sketch '" .. id .. "' answer should be at least two \"x:y\" points, e.g. \"20:250, 80:450\"; ignored.")
+      answer = nil
+    end
+  end
+  -- tolerance="40" (y units) or "10%" (of the y range, the default): how far
+  -- off a curve may be on average and still count as right in a quiz
+  local tolerance = (y[2] - y[1]) * 0.1
+  if a.tolerance then
+    local pct = a.tolerance:match("^%s*([%d.]+)%s*%%%s*$")
+    tolerance = pct and (y[2] - y[1]) * tonumber(pct) / 100 or tonumber(a.tolerance) or tolerance
+  end
+  warn_layout(el, id)
+  read_timer(el, id)
+  record_in(sketches, sketch_order, id, {
+    question = question,
+    show_question = show,
+    x = x,
+    y = y,
+    x_label = a["x-label"],
+    y_label = a["y-label"],
+    points = points,
+    answer = answer,
+    tolerance = tolerance,
+    results = results_attr(el, id),
+    qr = truthy(a.qr) ~= false,
   })
   return settled(el, id)
 end
@@ -1617,6 +1684,35 @@ local function hotspot_html(id, side)
   return table.concat(out, "\n")
 end
 
+local function sketch_html(id, side)
+  local k = sketches[id]
+  local eid = html_escape(id)
+  local out = {
+    '<div class="livepoll-question lp-sketch-q' .. (side and "" or " lp-noside") .. '" data-sketch="' .. eid
+      .. '" data-results="' .. k.results .. '">',
+    '<div class="lp-main">',
+  }
+  if k.show_question or not side then out[#out + 1] = question_html(id, k.question) end
+  -- drawn by questions.js: axes, every curve, the median and its band, the answer
+  out[#out + 1] = '<div class="lp-sketch" data-sketch="' .. eid .. '"><svg class="lp-sketch-plot"></svg>'
+    .. '<p class="lp-empty">Waiting for sketches…</p></div>'
+  out[#out + 1] = '<div class="lp-veil">Results hidden</div>'
+  out[#out + 1] = "</div>"
+  if side then
+    out[#out + 1] = panel_side_html(k.qr,
+      '<span class="sketch-voters lp-count-n" data-sketch="' .. eid .. '">0</span>', "sketches", id)
+  end
+  local correct = nil
+  if k.answer then
+    local pairs_text = {}
+    for _, p in ipairs(k.answer) do pairs_text[#pairs_text + 1] = number_text(p[1]) .. ":" .. number_text(p[2]) end
+    correct = table.concat(pairs_text, ",")
+  end
+  out[#out + 1] = answer_step(id, k, correct, correct and "The real data" or nil)
+  out[#out + 1] = "</div>"
+  return table.concat(out, "\n")
+end
+
 -- The audience's questions, most upvoted first (qa.js). max="6" shows that
 -- many; qr="false" drops the side column's QR.
 local function qa_html(el)
@@ -1660,6 +1756,9 @@ local function generate_div(el)
   end
   if el.classes:includes("hotspot") and hotspots[el.identifier] then
     return pandoc.RawBlock("html", hotspot_html(el.identifier, true))
+  end
+  if el.classes:includes("sketch") and sketches[el.identifier] then
+    return pandoc.RawBlock("html", sketch_html(el.identifier, true))
   end
   if el.classes:includes("qa") then
     qa_boards = qa_boards + 1
@@ -1714,6 +1813,7 @@ local function generate_div(el)
     if estimates[id] then return pandoc.RawBlock("html", estimate_html(id, false)) end
     if ranks[id] then return pandoc.RawBlock("html", rank_html(id, false)) end
     if hotspots[id] then return pandoc.RawBlock("html", hotspot_html(id, false)) end
+    if sketches[id] then return pandoc.RawBlock("html", sketch_html(id, false)) end
     if likerts[id] then
       local orientation = el.attributes["orientation"]
       if orientation ~= nil and orientation ~= "horizontal" and orientation ~= "vertical" then
@@ -1958,6 +2058,7 @@ local function read_session(meta)
   raw(session.estimates, estimates, "estimates", "estimate")
   raw(session.ranks, ranks, "ranks", "ranking")
   raw(session.hotspots, hotspots, "hotspots", "hotspot")
+  raw(session.sketches, sketches, "sketches", "sketch")
 
   if type(session.questions) == "table" and #session.questions > 0 then
     local list = {}
@@ -2171,7 +2272,7 @@ local function emit(doc)
   end
 
   if #poll_order == 0 and #cloud_order == 0 and #likert_order == 0 and #estimate_order == 0
-    and #rank_order == 0 and #hotspot_order == 0 and qa_boards == 0 then
+    and #rank_order == 0 and #hotspot_order == 0 and #sketch_order == 0 and qa_boards == 0 then
     quarto.log.warning("livepoll: no polls or word clouds found on the slides.")
   end
 
@@ -2206,6 +2307,13 @@ local function emit(doc)
   for id, h in pairs(hotspots) do
     published_hotspots[id] = { question = h.question, image = h.image, alt = h.alt, answer = h.answer }
   end
+  local published_sketches = {}
+  for id, k in pairs(sketches) do
+    published_sketches[id] = {
+      question = k.question, x = k.x, y = k.y, xLabel = k.x_label, yLabel = k.y_label,
+      points = k.points, answer = k.answer, tolerance = k.tolerance,
+    }
+  end
   for id, cloud in pairs(clouds) do
     published_clouds[id] = { question = cloud.question, maxWords = cloud.maxWords }
   end
@@ -2239,6 +2347,7 @@ local function emit(doc)
     estimates = next(published_estimates) and published_estimates or nil,
     ranks = next(published_ranks) and published_ranks or nil,
     hotspots = next(published_hotspots) and published_hotspots or nil,
+    sketches = next(published_sketches) and published_sketches or nil,
     timers = next(timers) and timers or nil,
     qa = qa,
     quiz = quiz,
@@ -2265,7 +2374,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "2.0.6",
+    version = "2.0.7",
     -- livepoll.js first: the others build on window.Livepoll
     scripts = { "qrcode.js", "livepoll.js", "filter.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
     stylesheets = { "livepoll.css" },
@@ -2286,6 +2395,7 @@ return {
       collect_div(el)
       collect_cloud(el)
       return collect_likert(el) or collect_estimate(el) or collect_rank(el) or collect_hotspot(el)
+        or collect_sketch(el)
     end,
     RawBlock = collect_rawblock,
     Meta = read_layout,

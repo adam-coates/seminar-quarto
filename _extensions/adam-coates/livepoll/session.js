@@ -547,7 +547,7 @@ const initSession = function (Reveal) {
       recorded.push(entry);
     });
 
-    // estimates, rankings, hotspots: the raw answers, which livepoll.lua
+    // estimates, rankings, hotspots, sketches: the raw answers, which livepoll.lua
     // re-tallies on replay
     const kinds = window.Livepoll ? Livepoll.kinds : {};
     function rawAnswers(kind, table, extra) {
@@ -593,6 +593,10 @@ const initSession = function (Reveal) {
       hotspots: rawAnswers("hotspot", "hotspots", function (d) {
         return { image: d.image, answer: d.answer };
       }),
+      // each answer a curve: d.points y-values at evenly spaced x across d.x
+      sketches: rawAnswers("sketch", "sketches", function (d) {
+        return { x: d.x, y: d.y, xLabel: d.xLabel, yLabel: d.yLabel, points: d.points, answer: d.answer };
+      }),
       questions: window.Livepoll && Livepoll.questions
         ? Livepoll.questions().map(function (q) {
             return { text: q.text, votes: q.votes, status: q.status, asked: new Date(q.t).toISOString(), by: pseudonym(q.who) };
@@ -634,7 +638,7 @@ const initSession = function (Reveal) {
 
   function buildCsv() {
     const config = deckConfig() || {};
-    const tables = ["polls", "clouds", "likerts", "estimates", "ranks", "hotspots"];
+    const tables = ["polls", "clouds", "likerts", "estimates", "ranks", "hotspots", "sketches"];
     function questionText(id) {
       for (const t of tables) if (config[t] && config[t][id]) return config[t][id].question;
       return "";
