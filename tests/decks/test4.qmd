@@ -1,0 +1,28 @@
+---
+title: "Livepoll word filter"
+format:
+  revealjs:
+    revealjs-plugins:
+      - livepoll
+filters:
+  - livepoll
+seminar:
+  server: "http://localhost:4433/"
+  url: "seminar-quarto-demo"
+  room: "test4"
+  hash: "$2a$05$PP2N6d07kWQNp3VLSn.w3OmfUd/fuVJ8U5vHdA3ku/hdRgMy3Vlp."
+livepoll:
+  quiz: true
+  blocked-words: [Kevin]
+  allowed-words: Dick
+---
+
+## Cloud
+
+::: {.wordcloud #fc max-words="6"}
+:::
+
+## Questions
+
+::: {.qa}
+:::

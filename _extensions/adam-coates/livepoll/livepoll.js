@@ -1453,6 +1453,114 @@
   // stops at max-words, and now so does the host, for anyone who skips the page.
   var cloudSenders = {}; // cloudId -> { voter key -> words sent }
 
+  function acceptWord(id, word, who, t) {
+    addWords(id, [word]);
+    renderCloud(id);
+    broadcastCounts(id);
+    LP.response({ kind: "wordcloud", id: id, who: who, value: word, t: t });
+  }
+
+  /* Words held for approval, host only: those the filter flags (filter.js)
+   * and, with `livepoll: wordcloud: moderated`, every word. Counted against
+   * the sender's max-words like any other, so holding one is no invitation to
+   * try again. The presenter's panel lists them, identical words together. */
+  var cloudHeld = []; // [{ cloud, word, who, t, flagged }]
+  var heldPanel = null;
+
+  function heldGroups() {
+    var groups = [];
+    var byKey = {};
+    cloudHeld.forEach(function (h) {
+      var key = h.cloud + "|" + h.word.toLowerCase();
+      if (!byKey[key]) {
+        byKey[key] = { key: key, cloud: h.cloud, word: h.word, n: 0, flagged: false };
+        groups.push(byKey[key]);
+      }
+      byKey[key].n++;
+      byKey[key].flagged = byKey[key].flagged || h.flagged;
+    });
+    return groups;
+  }
+
+  function decideHeld(key, approve) {
+    var keep = [];
+    var touched = {};
+    cloudHeld.forEach(function (h) {
+      var match = key === "*unflagged" ? !h.flagged : h.cloud + "|" + h.word.toLowerCase() === key;
+      if (!match) return keep.push(h);
+      if (approve) {
+        addWords(h.cloud, [h.word]);
+        touched[h.cloud] = true;
+        LP.response({ kind: "wordcloud", id: h.cloud, who: h.who, value: h.word, t: h.t });
+      }
+    });
+    cloudHeld = keep;
+    Object.keys(touched).forEach(function (id) {
+      renderCloud(id);
+      broadcastCounts(id);
+    });
+    drawHeld();
+    LP.dirty();
+  }
+
+  function drawHeld() {
+    LP.hud.refresh();
+    if (!heldPanel) return;
+    var groups = heldGroups();
+    var several = Object.keys(deckConfig().clouds || {}).length > 1;
+    var unflagged = cloudHeld.filter(function (h) { return !h.flagged; }).length;
+    heldPanel.querySelector("h3").textContent = "Words to approve" + (cloudHeld.length ? " (" + cloudHeld.length + ")" : "");
+    heldPanel.querySelector(".livepoll-cloud-held").innerHTML = groups.length
+      ? groups
+          .map(function (g) {
+            return (
+              '<div class="livepoll-qa-item" data-key="' + LP.escape(g.key) + '">' +
+              '<span class="livepoll-qa-votes">' + (g.flagged ? '<span title="Matched the word filter">⚠</span>' : "") +
+              (g.n > 1 ? "×" + g.n : "") + "</span>" +
+              '<span class="livepoll-qa-text">' + LP.escape(g.word) +
+              (several ? ' <span class="livepoll-hint">(' + LP.escape(g.cloud) + ")</span>" : "") + "</span>" +
+              '<span class="livepoll-qa-actions"><button type="button" data-act="approve" title="Add to the cloud">Approve</button>' +
+              '<button type="button" data-act="reject" title="Leave it out">✕</button></span></div>'
+            );
+          })
+          .join("") +
+          (unflagged > 1 ? '<button type="button" data-act="approve-unflagged">Approve all not flagged (' + unflagged + ")</button>" : "")
+      : '<p class="livepoll-hint">Nothing waiting.</p>';
+  }
+
+  // called once the panel exists (the DOMContentLoaded handler at the end)
+  function initHeldPanel() {
+    if (!Object.keys(deckConfig().clouds || {}).length) return;
+    if (!LP.filter.on() && deckConfig().wordcloud !== "moderated") return;
+    heldPanel = LP.addSection(
+      "livepoll-cloud-moderation",
+      "Words to approve",
+      '<div class="livepoll-cloud-held"></div><p class="livepoll-hint">' +
+        (deckConfig().wordcloud === "moderated"
+          ? "Every word waits for your approval before it joins the cloud. "
+          : "Words the filter flags (⚠) wait here instead of joining the cloud. ") +
+        "Nobody else sees them unless you approve them.</p>"
+    );
+    heldPanel.addEventListener("click", function (evt) {
+      var act = evt.target.getAttribute && evt.target.getAttribute("data-act");
+      if (!act) return;
+      if (!LP.hosting()) {
+        alert("You must be hosting the seminar for that");
+        return;
+      }
+      if (act === "approve-unflagged") return decideHeld("*unflagged", true);
+      var item = evt.target.closest(".livepoll-qa-item");
+      if (item) decideHeld(item.getAttribute("data-key"), act === "approve");
+    });
+    drawHeld();
+  }
+
+  LP.hud.add("cloud-held", 41, function () {
+    if (!LP.hosting() || !cloudHeld.length) return "";
+    return '<div class="lp-hud-title"><span class="lp-hud-alert">' + cloudHeld.length +
+      (cloudHeld.length === 1 ? " word" : " words") + " to approve</span></div>";
+  });
+
   function cloudAllowance(id, event, content) {
     var def = (deckConfig().clouds || {})[id];
     var max = (def && def.maxWords) || 3;
@@ -1476,10 +1584,17 @@
         return typeof w === "string" && w.trim() && w.length <= 40;
       });
       if (!words.length || !cloudAllowance(content.cloud, event, content)) return;
-      addWords(content.cloud, words.slice(0, 1));
-      renderCloud(content.cloud);
-      broadcastCounts(content.cloud);
-      LP.response({ kind: "wordcloud", id: content.cloud, who: LP.who(event, content), value: words[0].trim() });
+      var word = words[0].trim();
+      var who = LP.who(event, content);
+      var flagged = LP.filter.flags(word);
+      // held back, unseen by anyone but the presenter, until approved
+      if (flagged || deckConfig().wordcloud === "moderated") {
+        cloudHeld.push({ cloud: content.cloud, word: word, who: who, t: Date.now(), flagged: flagged });
+        drawHeld();
+        LP.dirty();
+        return;
+      }
+      acceptWord(content.cloud, word, who, Date.now());
     } else if (content.type === "counts") {
       if (!LP.trusted(event)) return;
       cloudCounts[content.cloud] = content.counts || {};
@@ -1494,6 +1609,8 @@
   LP.kinds.wordcloud = {
     reset: function (id) {
       delete cloudSenders[id];
+      cloudHeld = cloudHeld.filter(function (h) { return h.cloud !== id; });
+      drawHeld();
       clearCloud(id);
     },
     count: function (id) {
@@ -1507,10 +1624,12 @@
 
   LP.persist("clouds", {
     save: function () {
-      return { counts: cloudCounts, senders: cloudSenders };
+      return { counts: cloudCounts, senders: cloudSenders, held: cloudHeld };
     },
     restore: function (data) {
       cloudSenders = data.senders || {};
+      cloudHeld = data.held || [];
+      drawHeld();
       Object.keys(data.counts || {}).forEach(function (id) {
         // through the same message a live session uses, so session.js and
         // every drawing of the cloud see it
@@ -2680,7 +2799,7 @@
 
   var MIRRORED = [
     "#livepoll-live", "#activePollDisplay", "#livepoll-autosave",
-    ".livepoll-qa-list", ".livepoll-qa-hidden", ".livepoll-quiz-list",
+    ".livepoll-qa-list", ".livepoll-qa-hidden", ".livepoll-quiz-list", ".livepoll-cloud-held",
     ".livepoll-signals-now", ".livepoll-section h3",
   ];
 
@@ -2776,6 +2895,7 @@
     initSeminarControls();
     initPollControls();
     moveIntoMenu();
+    initHeldPanel();
     renderQRCodes();
     renderPanelQRCodes();
     initClassicLikerts();

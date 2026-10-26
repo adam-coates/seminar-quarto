@@ -74,7 +74,12 @@
       if (!who) return;
       var p = player(who);
       var nick = cleanNick(content.nickname);
-      if (nick && !p.renamed) p.nick = nick;
+      if (nick && !p.renamed) {
+        // a nickname the word filter flags never reaches the leaderboard: the
+        // player gets a neutral one, for good, as the Rename button gives
+        if (LP.filter.flags(nick)) p.renamed = true;
+        else p.nick = nick;
+      }
       LP.sendTo(LP.socketOf(event), { sender: "quiz", type: "you", nickname: p.nick, score: p.score });
       // on the leaderboard from the moment they join, not from the next score
       queueBoard();

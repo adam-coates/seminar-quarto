@@ -2076,6 +2076,41 @@ local function emit(doc)
     ids = "session"
   end
 
+  -- A list option: a YAML list, or one string of comma-separated words.
+  local function option_list(key, default)
+    local v = meta.livepoll and meta.livepoll[key]
+    if v == nil then return default end
+    local items = pandoc.utils.type(v) == "List" and v or { v }
+    local out = {}
+    for _, item in ipairs(items) do
+      for word in tostring(meta_value(item) or ""):gmatch("[^,]+") do
+        word = word:match("^%s*(.-)%s*$")
+        if word ~= "" then out[#out + 1] = word end
+      end
+    end
+    return out
+  end
+
+  -- The word filter (filter.js): what participants type is checked before the
+  -- projector shows it. On by default; languages pick the bundled lists.
+  local filter_languages = option_list("filter-languages", { "en", "de" })
+  for _, lang in ipairs(filter_languages) do
+    if lang ~= "en" and lang ~= "de" then
+      quarto.log.warning("livepoll: no word list for filter language '" .. lang .. "' (there are en and de); use blocked-words.")
+    end
+  end
+  local filter = {
+    on = switch("filter", true),
+    languages = filter_languages,
+    blocked = option_list("blocked-words", {}),
+    allowed = option_list("allowed-words", {}),
+  }
+
+  -- wordcloud: true (default) | moderated — moderated holds every word back
+  -- until the presenter approves it, as qa: moderated does for questions
+  local wordcloud = option("wordcloud", true)
+  if wordcloud ~= "moderated" then wordcloud = true end
+
   local signal_window = tonumber(option("signal-window", "120")) or 120
   local quiz = switch("quiz", false)
   if leaderboards > 0 and not quiz then
@@ -2171,6 +2206,8 @@ local function emit(doc)
     timers = next(timers) and timers or nil,
     qa = qa,
     quiz = quiz,
+    filter = filter,
+    wordcloud = wordcloud,
     -- both opt-in: not every room wants them
     signals = switch("signals", false),
     reactions = switch("reactions", false),
@@ -2192,9 +2229,9 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "2.0.5",
+    version = "2.0.6",
     -- livepoll.js first: the others build on window.Livepoll
-    scripts = { "qrcode.js", "livepoll.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
+    scripts = { "qrcode.js", "livepoll.js", "vendor/wordlists.js", "filter.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
     stylesheets = { "livepoll.css" },
   })
 

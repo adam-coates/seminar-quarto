@@ -4,5 +4,7 @@ project:
     - test.qmd
     - test2.qmd
     - test3.qmd
+    - test4.qmd
+    - test5.qmd
   post-render:
     - _extensions/adam-coates/livepoll/copy-poll-page.lua

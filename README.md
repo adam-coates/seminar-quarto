@@ -205,6 +205,10 @@ A 95% confidence interval for a mean is (4.1, 5.3). Which is right?
 `max-words` is how many words each person may send (default 3; the host
 enforces it too). **Reset results** in the Live poll tab wipes a cloud.
 
+Words the [word filter](#word-filter) flags wait under **Words to approve** in
+the Live poll tab instead of joining the cloud. `livepoll: wordcloud:
+moderated` holds every word there until you approve it.
+
 ### Rating scales
 
 ```markdown
@@ -319,7 +323,39 @@ speaker view too. A slide can show the board:
 ```
 
 `livepoll: qa: moderated` holds every question back until you **Approve** it;
-`qa: false` turns questions off.
+`qa: false` turns questions off. Questions the [word filter](#word-filter)
+flags are held back for approval either way.
+
+### Word filter
+
+What participants type is checked before anything reaches the projector:
+word-cloud words, Q&A questions and quiz nicknames. Nothing is deleted on the
+filter's say-so:
+
+- a flagged **word** waits under **Words to approve**, marked ⚠, until you
+  approve or reject it;
+- a flagged **question** waits for **Approve**, as with `qa: moderated`;
+- a flagged **nickname** is replaced with a neutral "Player N".
+
+The participant isn't told a word was held. The filter uses bundled English
+and German word lists, matches whole words only (so "Scunthorpe" and
+"assessment" pass), and sees through capitals, accents, look-alikes (`sh1t`,
+`a$$`), masking (`f*ck`) and stretched letters (`fuuuck`).
+
+```yaml
+livepoll:
+  filter: true                 # default; false turns it off
+  filter-languages: [en, de]   # the bundled lists to use
+  blocked-words: [Kevin]       # your additions
+  allowed-words: [Dick, penis] # let these through
+  wordcloud: moderated         # hold every word for approval
+```
+
+A word list catches the obvious, not every misspelling or every innocent
+word used rudely, so for a large audience `wordcloud: moderated` is the safer
+choice: the filter then just marks the words worth a second look. The lists
+also include anatomical and medical terms ("penis", "rectum", "anal"); in a
+biology or medicine class, add the ones you expect to `allowed-words`.
 
 ### Signals and reactions
 
@@ -502,6 +538,11 @@ Other options under `livepoll:`:
 | `position` | `top-right` | where that button sits: `top-left`, `bottom-right`, `bottom-left`, `hidden` |
 | `session` | `session.json` | the recording to replay; `false` turns replay off |
 | `qa` | `true` | audience questions; `moderated` to approve each, `false` for none |
+| `wordcloud` | `true` | `moderated` to approve each word-cloud word |
+| `filter` | `true` | the [word filter](#word-filter) for words, questions and nicknames |
+| `filter-languages` | `[en, de]` | which bundled word lists the filter uses |
+| `blocked-words` | | words to flag besides the lists |
+| `allowed-words` | | words never to flag |
 | `signals` | `false` | the "Lost me" / "Slow down" buttons |
 | `signal-window` | `120` | seconds a signal lasts |
 | `reactions` | `false` | the emoji reactions |

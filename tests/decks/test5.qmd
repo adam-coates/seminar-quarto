@@ -1,0 +1,22 @@
+---
+title: "Livepoll moderated cloud"
+format:
+  revealjs:
+    revealjs-plugins:
+      - livepoll
+filters:
+  - livepoll
+seminar:
+  server: "http://localhost:4433/"
+  url: "seminar-quarto-demo"
+  room: "test5"
+  hash: "$2a$05$PP2N6d07kWQNp3VLSn.w3OmfUd/fuVJ8U5vHdA3ku/hdRgMy3Vlp."
+livepoll:
+  wordcloud: moderated
+  filter: false
+---
+
+## Moderated cloud
+
+::: {.wordcloud #mc max-words="5"}
+:::
