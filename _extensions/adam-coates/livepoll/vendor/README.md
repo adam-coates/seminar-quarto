@@ -7,8 +7,8 @@ a network without internet access.
 
 | File | Package | Licence |
 |---|---|---|
-| `socket.io.min.js` | socket.io-client 4.8.1 (`dist/socket.io.min.js`) | MIT |
-| `chart.min.js` | chart.js 3.2.0 (`dist/chart.min.js`) | MIT |
+| `socket.io.min.js` | socket.io-client 4.8.4 (`dist/socket.io.min.js`) | MIT |
+| `chart.min.js` | chart.js 3.9.1 (`dist/chart.min.js`) | MIT |
 | `poll-style.css` | reveal.js-plugins 4.6.0 (`poll/style.css`) | MIT |
 
 Each package's licence text is in `licenses/<package>.txt`.

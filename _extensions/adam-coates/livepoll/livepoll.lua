@@ -63,8 +63,8 @@
 -- wanted; the script is not.
 local vendor = {
   name = "livepoll-vendor",
-  -- socket.io-client 4.8.1, chart.js 3.2.0, reveal.js-plugins 4.6.0
-  version = "4.8.1-3.2.0-4.6.0",
+  -- socket.io-client 4.8.4, chart.js 3.9.1, reveal.js-plugins 4.6.0
+  version = "4.8.4-3.9.1-4.6.0",
   scripts = { "vendor/socket.io.min.js", "vendor/chart.min.js" },
   stylesheets = { "vendor/poll-style.css" },
 }
