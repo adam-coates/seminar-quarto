@@ -4,8 +4,9 @@
 ** Checks what participants type before the projector can show it: word-cloud
 ** words, Q&A questions and quiz nicknames. Nothing is deleted on its say:
 ** a flagged word or question waits for the presenter's approval, a flagged
-** nickname becomes "Player N". The lists are vendor/wordlists.js (English and
-** German) plus the deck's own `blocked-words`, less its `allowed-words`.
+** nickname becomes "Player N". The lists (English and German, LDNOOBW) come
+** in the deck's config, downloaded when it was rendered (livepoll.lua), plus
+** the deck's own `blocked-words`, less its `allowed-words`.
 **
 ** Matching is by whole word (or whole phrase), after folding case, accents,
 ** look-alike characters (sh1t, a$$) and stretched letters (fuuuck), with `*`
@@ -40,10 +41,9 @@
 
   function build() {
     var cfg = LP.config().filter || {};
-    var source = window.LivepollWordlists || {};
     var all = [];
-    (cfg.languages || ["en", "de"]).forEach(function (lang) {
-      all = all.concat(source[lang] || []);
+    Object.keys(cfg.lists || {}).forEach(function (lang) {
+      all = all.concat(cfg.lists[lang] || []);
     });
     all = all.concat(cfg.blocked || []);
     lists = { single: {}, phrases: [], allowed: {} };

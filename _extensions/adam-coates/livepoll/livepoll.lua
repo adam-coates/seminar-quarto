@@ -69,6 +69,16 @@ local vendor = {
   stylesheets = { "vendor/poll-style.css" },
 }
 
+-- The word filter's lists, fetched at render time (see `filter` below):
+-- "List of Dirty, Naughty, Obscene and Otherwise Bad Words" (LDNOOBW),
+-- CC BY 4.0, pinned to one commit and checked by SHA-1.
+local LDNOOBW = "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/"
+  .. "5faf2ba42d7b1c0977169ec3611df25a3c08eb13/"
+local WORD_LISTS = {
+  en = { url = LDNOOBW .. "en", sha1 = "5a825c81e1d64f63dfb58f0187c78b0db8850955" },
+  de = { url = LDNOOBW .. "de", sha1 = "fa5c1f6f0c1b1d8d7c4b3c1e8d0446ce9d5fb716" },
+}
+
 local LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 local CHECKED = "☒" -- pandoc's rendering of "- [x]"
 local UNCHECKED = "☐" -- ... and of "- [ ]"
@@ -2092,18 +2102,44 @@ local function emit(doc)
   end
 
   -- The word filter (filter.js): what participants type is checked before the
-  -- projector shows it. On by default; languages pick the bundled lists.
-  local filter_languages = option_list("filter-languages", { "en", "de" })
-  for _, lang in ipairs(filter_languages) do
-    if lang ~= "en" and lang ~= "de" then
-      quarto.log.warning("livepoll: no word list for filter language '" .. lang .. "' (there are en and de); use blocked-words.")
+  -- projector shows it. On by default. The lists are not kept in this
+  -- repository: they are downloaded here, at render time, from a pinned commit
+  -- of LDNOOBW, checked against their SHA-1 and written into the deck, so the
+  -- presentation itself contacts no one. Rendering offline leaves just the
+  -- deck's own blocked-words, with a warning.
+  local filter_on = switch("filter", true)
+  local filter_lists = {}
+  if filter_on then
+    for _, lang in ipairs(option_list("filter-languages", { "en", "de" })) do
+      local source = WORD_LISTS[lang]
+      if not source then
+        quarto.log.warning("livepoll: no word list for filter language '" .. lang .. "' (there are en and de); use blocked-words.")
+      else
+        local ok, _, body = pcall(pandoc.mediabag.fetch, source.url)
+        if not ok or type(body) ~= "string" then
+          quarto.log.warning("livepoll: could not download the '" .. lang .. "' word list (offline?); the filter uses only blocked-words.")
+        elseif pandoc.utils.sha1(body) ~= source.sha1 then
+          quarto.log.warning("livepoll: the '" .. lang .. "' word list is not the expected file; not using it.")
+        else
+          local words = {}
+          for line in body:gmatch("[^\r\n]+") do
+            line = line:match("^%s*(.-)%s*$")
+            if line ~= "" then words[#words + 1] = line end
+          end
+          filter_lists[lang] = words
+        end
+      end
     end
   end
   local filter = {
-    on = switch("filter", true),
-    languages = filter_languages,
+    on = filter_on,
+    lists = filter_lists,
     blocked = option_list("blocked-words", {}),
     allowed = option_list("allowed-words", {}),
+    -- the lists' licence (CC BY 4.0) asks for credit wherever they go
+    credit = "Word lists: List of Dirty, Naughty, Obscene and Otherwise Bad Words, "
+      .. "https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words, "
+      .. "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
   }
 
   -- wordcloud: true (default) | moderated — moderated holds every word back
@@ -2231,7 +2267,7 @@ local function emit(doc)
     -- livepoll.css keeps using it against the new livepoll.js.
     version = "2.0.6",
     -- livepoll.js first: the others build on window.Livepoll
-    scripts = { "qrcode.js", "livepoll.js", "vendor/wordlists.js", "filter.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
+    scripts = { "qrcode.js", "livepoll.js", "filter.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
     stylesheets = { "livepoll.css" },
   })
 
