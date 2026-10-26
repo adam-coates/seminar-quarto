@@ -1862,9 +1862,11 @@
           text = "the dashed green line";
           if (mine) {
             const off = sketchError(mine, s);
+            // an average distance: one decimal from 10 up, two below
+            const roughly = off === null ? "—" : numberText(Math.round(off * (off >= 10 ? 10 : 100)) / (off >= 10 ? 10 : 100));
             verdict = off !== null && off <= s.tolerance
-              ? '<div class="verdict right">✅ Close: you were off by ' + esc(numberText(off)) + " on average</div>"
-              : '<div class="verdict wrong">❌ Off by ' + (off === null ? "—" : esc(numberText(off))) + " on average</div>";
+              ? '<div class="verdict right">✅ Close: you were off by ' + esc(roughly) + " on average</div>"
+              : '<div class="verdict wrong">❌ Off by ' + esc(roughly) + " on average</div>";
           }
         } else if (kind === "hotspot") {
           const h = cfg.hotspots[id];
