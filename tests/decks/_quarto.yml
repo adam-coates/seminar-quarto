@@ -1,0 +1,7 @@
+project:
+  type: default
+  render:
+    - test.qmd
+    - test2.qmd
+  post-render:
+    - _extensions/adam-coates/livepoll/copy-poll-page.lua

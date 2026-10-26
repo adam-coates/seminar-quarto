@@ -2,6 +2,9 @@
 # Update the libraries in _extensions/adam-coates/livepoll/vendor/ to the
 # newest npm release within each allowed range. Run from the repository root.
 #
+# Also refreshes each updated package's licence text (vendor/licenses/) and
+# the licence named in vendor/README.md's table, flagging any change.
+#
 # Prints what changed. Under GitHub Actions it also sets the step outputs
 # `changed` (true/false) and `summary` (markdown, one line per library).
 #
@@ -46,8 +49,23 @@ for lib in "${LIBS[@]}"; do
   tar -xzf "$work"/*"-$new.tgz" -C "$work/$pkg"
   rm -f "$work"/*.tgz
   cp "$work/$pkg/package/$src" "$VENDOR/$dest"
-  sed -i "s/| $pkg $old /| $pkg $new /" "$VENDOR/README.md"
-  summary+="- **$pkg** $old → $new ([changes](https://www.npmjs.com/package/$pkg/v/$new))"$'\n'
+
+  # licence: the package's own licence file, and the SPDX name in the table
+  oldlic=$(grep -F "| \`$dest\` |" "$VENDOR/README.md" | awk -F'|' '{gsub(/^ +| +$/, "", $4); print $4}')
+  newlic=$(jq -r '.license // "unknown"' "$work/$pkg/package/package.json")
+  licfile=$(find "$work/$pkg/package" -maxdepth 1 -type f -iname 'licen[cs]e*' | sort | head -1)
+  note=""
+  if [[ -n "$licfile" ]]; then
+    cp "$licfile" "$VENDOR/licenses/$pkg.txt"
+  else
+    note+=" ⚠️ no licence file in the package; \`licenses/$pkg.txt\` is the old one."
+  fi
+  [[ "$newlic" == "$oldlic" ]] || note+=" ⚠️ **licence changed: $oldlic → $newlic**"
+  awk -v row="| \`$dest\` |" -v new="| \`$dest\` | $pkg $new (\`$src\`) | $newlic |" \
+    'index($0, row) == 1 { print new; next } { print }' "$VENDOR/README.md" >"$work/README.md"
+  mv "$work/README.md" "$VENDOR/README.md"
+
+  summary+="- **$pkg** $old → $new ([changes](https://www.npmjs.com/package/$pkg/v/$new))$note"$'\n'
 done
 
 changed=false

@@ -1,0 +1,45 @@
+---
+title: "Livepoll 2 options"
+format:
+  revealjs:
+    revealjs-plugins:
+      - livepoll
+filters:
+  - livepoll
+seminar:
+  server: "http://localhost:4433/"
+  url: "seminar-quarto-demo"
+  room: "test2"
+  hash: "$2a$05$PP2N6d07kWQNp3VLSn.w3OmfUd/fuVJ8U5vHdA3ku/hdRgMy3Vlp."
+livepoll:
+  qa: moderated
+  ids: none
+  signal-window: 3
+  signals: true
+  reactions: false
+---
+
+## Classic multi
+
+::: {.poll #cm multiple="true" timer="5"}
+Which do you use?
+
+- [x] Git
+- [ ] SVN
+- [x] Mercurial
+:::
+
+## Classic results
+
+::: {.poll-results for="cm"}
+:::
+
+## Cloud
+
+::: {.wordcloud #cl max-words="2"}
+:::
+
+## Board
+
+::: {.qa}
+:::

@@ -642,3 +642,14 @@ version (`livepoll-2.0.4/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.
+
+## Tests
+
+`tests/run.sh` renders test decks and this demo with the extension, starts a
+local relay, and drives a presenter and several phones through every feature
+in headless Chrome. It also fails if any page loads something from a CDN. See
+[tests/README.md](tests/README.md) for what it needs. GitHub Actions runs it
+on every pull request and push to `master`.
+
+The bundled libraries in `vendor/` are checked for new releases weekly; an
+update arrives as a pull request with the tests already run on it.

@@ -1,0 +1,45 @@
+# Renders the test decks and the demo with the extension and runs the browser
+# suites in tests/ (see tests/README.md). To block merging until they pass,
+# require the "browser-tests" check in a branch rule for master.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  # also started by update-vendor.yml for its pull requests: pull requests
+  # opened by GitHub Actions don't trigger pull_request workflows themselves
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: 1.10.19
+
+      - run: npm ci
+        working-directory: tests
+
+      - run: tests/run.sh
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: tests/out/

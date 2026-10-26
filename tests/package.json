@@ -1,0 +1,13 @@
+{
+  "name": "livepoll-tests",
+  "private": true,
+  "description": "Browser tests for the livepoll extension; run tests/run.sh",
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "cors": "2.8.5",
+    "express": "4.18.2",
+    "moment": "2.29.4",
+    "puppeteer-core": "22.15.0",
+    "socket.io": "4.6.1"
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "deck": "test.html",
+  "recorded": "2026-10-26T11:37:10.721Z",
+  "started": "2026-10-26T11:36:55.856Z",
+  "generator": "session.js/2.0",
+  "ids": "session",
+  "polls": [
+    {
+      "id": "lang",
+      "slide": "which-language-do-you-use-most",
+      "question": "Which language do you use most?",
+      "voters": 2,
+      "options": [
+        {
+          "label": "R",
+          "value": "A",
+          "correct": false,
+          "votes": 1
+        },
+        {
+          "label": "Python",
+          "value": "B",
+          "correct": false,
+          "votes": 0
+        },
+        {
+          "label": "Julia",
+          "value": "C",
+          "correct": false,
+          "votes": 1
+        }
+      ]
+    }
+  ],
+  "clouds": [],
+  "likerts": [],
+  "estimates": [
+    {
+      "id": "mean",
+      "slide": "guess-the-mean",
+      "question": "What share of people own a bike?",
+      "answer": 42,
+      "unit": "%",
+      "min": 0,
+      "max": 100,
+      "answers": [
+        33,
+        48
+      ]
+    }
+  ],
+  "ranks": [],
+  "hotspots": [],
+  "questions": [
+    {
+      "text": "What is a confidence interval, really?",
+      "votes": 0,
+      "status": "open",
+      "asked": "2026-10-26T11:36:56.678Z",
+      "by": "p1"
+    }
+  ],
+  "leaderboard": [
+    {
+      "nickname": "Player 1",
+      "score": 0,
+      "right": 0,
+      "player": "p1"
+    },
+    {
+      "nickname": "Player 2",
+      "score": 0,
+      "right": 0,
+      "player": "p2"
+    }
+  ],
+  "opened": {
+    "lang": "2026-10-26T11:36:55.133Z",
+    "mean": "2026-10-26T11:36:55.866Z"
+  },
+  "responses": [
+    {
+      "t": "2026-10-26T11:36:55.856Z",
+      "kind": "poll",
+      "id": "lang",
+      "value": "C",
+      "participant": "p1"
+    },
+    {
+      "t": "2026-10-26T11:36:56.594Z",
+      "kind": "estimate",
+      "id": "mean",
+      "value": 33,
+      "participant": "p1"
+    },
+    {
+      "t": "2026-10-26T11:36:56.611Z",
+      "kind": "estimate",
+      "id": "mean",
+      "value": 48,
+      "participant": "p2"
+    },
+    {
+      "t": "2026-10-26T11:36:56.678Z",
+      "kind": "qa",
+      "id": "q1",
+      "value": "What is a confidence interval, really?",
+      "participant": "p1"
+    },
+    {
+      "t": "2026-10-26T11:37:08.408Z",
+      "kind": "poll",
+      "id": "lang",
+      "value": "A",
+      "participant": "p2"
+    }
+  ],
+  "signals": [
+    {
+      "t": "2026-10-26T11:36:56.694Z",
+      "kind": "lost",
+      "on": true,
+      "slide": "guess-the-mean"
+    }
+  ],
+  "reactions": [],
+  "drawings": []
+}
