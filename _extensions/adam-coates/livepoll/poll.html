@@ -6,6 +6,8 @@
     <title>Live Poll</title>
     <!-- copied here by copy-poll-page.lua; served locally so phones contact no third party -->
     <script src="livepoll-socket.io.min.js"></script>
+    <!-- the maths of "draw your guess", shared with the deck; also copied here -->
+    <script src="livepoll-sketch.js"></script>
     <style>
       * {
         margin: 0;
@@ -636,6 +638,19 @@
         stroke-width: 7;
         stroke-linejoin: round;
         stroke-linecap: round;
+      }
+
+      .sketch-frame .known {
+        fill: none;
+        stroke: #333;
+        stroke-width: 7;
+        stroke-linejoin: round;
+      }
+
+      .sketch-frame .known-dot {
+        fill: #333;
+        stroke: white;
+        stroke-width: 4;
       }
 
       .sketch-frame .truth {
@@ -1654,36 +1669,41 @@
       /* ------------------------------------------------------ sketch */
 
       // The chart is drawn in a fixed 1000×820 box, scaled to the phone (so
-      // its text is sized for that: about a third once on screen). The curve
-      // is s.points y-values at evenly spaced x, null where undrawn.
-      const SK = { w: 1000, h: 820, l: 150, r: 36, t: 30, b: 140 };
+      // its text is sized for that: about a third once on screen). The maths
+      // (axes, log scales, where drawing starts, how far off a curve is) is
+      // livepoll-sketch.js, shared with the deck.
+      const SKM = window.LivepollSketch;
+
+      // The box and its margins for one question: the left margin fits the
+      // longest y tick label ("10000 users").
+      function sketchBox(s) {
+        const l = Math.min(420, Math.max(150, 30 + SKM.widestY(s) * 23 + (s.yLabel ? 50 : 0)));
+        return { w: 1000, h: 820, l, r: 36, t: 30, b: 140 };
+      }
 
       function sketchScales(s) {
+        const SK = sketchBox(s);
         const pw = SK.w - SK.l - SK.r, ph = SK.h - SK.t - SK.b;
         return {
-          pw, ph,
+          SK, pw, ph,
           X: (i) => SK.l + (pw * i) / (s.points - 1),
-          XV: (x) => SK.l + (pw * (x - s.x[0])) / (s.x[1] - s.x[0]),
-          Y: (y) => SK.t + ph * (1 - (y - s.y[0]) / (s.y[1] - s.y[0])),
+          XV: (x) => SK.l + pw * SKM.sx(s, x),
+          Y: (y) => SK.t + ph * (1 - SKM.sy(s, y)),
         };
       }
 
-      function niceStep(span) {
-        const raw = span / 5, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
-        return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
-      }
-
       function sketchAxes(s) {
-        const { pw, ph, XV, Y } = sketchScales(s);
+        const { SK, pw, ph } = sketchScales(s);
         let out = "";
-        const sx = niceStep(s.x[1] - s.x[0]), sy = niceStep(s.y[1] - s.y[0]);
-        for (let v = Math.ceil(s.x[0] / sx) * sx; v <= s.x[1] + 1e-9; v += sx) {
-          out += `<line class="grid" x1="${XV(v)}" x2="${XV(v)}" y1="${SK.t}" y2="${SK.t + ph}"/>` +
-            `<text class="tick" x="${XV(v)}" y="${SK.t + ph + 50}" text-anchor="middle">${esc(numberText(v))}</text>`;
+        for (const tk of SKM.ticks(s, "x")) {
+          const p = SK.l + pw * tk.s;
+          out += `<line class="grid" x1="${p}" x2="${p}" y1="${SK.t}" y2="${SK.t + ph}"/>` +
+            `<text class="tick" x="${p}" y="${SK.t + ph + 50}" text-anchor="middle">${esc(tk.text)}</text>`;
         }
-        for (let v = Math.ceil(s.y[0] / sy) * sy; v <= s.y[1] + 1e-9; v += sy) {
-          out += `<line class="grid" x1="${SK.l}" x2="${SK.l + pw}" y1="${Y(v)}" y2="${Y(v)}"/>` +
-            `<text class="tick" x="${SK.l - 14}" y="${Y(v) + 14}" text-anchor="end">${esc(numberText(v))}</text>`;
+        for (const tk of SKM.ticks(s, "y")) {
+          const p = SK.t + ph * (1 - tk.s);
+          out += `<line class="grid" x1="${SK.l}" x2="${SK.l + pw}" y1="${p}" y2="${p}"/>` +
+            `<text class="tick" x="${SK.l - 14}" y="${p + 14}" text-anchor="end">${esc(tk.text)}</text>`;
         }
         if (s.xLabel) out += `<text class="axis-label" x="${SK.l + pw / 2}" y="${SK.h - 22}" text-anchor="middle">${esc(s.xLabel)}</text>`;
         if (s.yLabel) out += `<text class="axis-label" transform="rotate(-90)" x="${-(SK.t + ph / 2)}" y="40" text-anchor="middle">${esc(s.yLabel)}</text>`;
@@ -1705,50 +1725,44 @@
         return lines.map((r) => `<polyline class="${cls}" points="${r.join(" ")}"/>`).join("");
       }
 
-      function sketchTruth(s) {
+      // straight lines through data points, on the chart's own axes
+      function sketchPath(pts, s, cls) {
         const { XV, Y } = sketchScales(s);
-        return `<polyline class="truth" points="${s.answer.map((p) => `${XV(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}"/>`;
+        return `<polyline class="${cls}" points="${pts.map((p) => `${XV(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ")}"/>`;
       }
 
-      // average distance from the real data where both exist (same as the deck's)
-      function sketchError(curve, s) {
-        let sum = 0, n = 0;
-        curve.forEach((y, i) => {
-          if (y === null) return;
-          const x = s.x[0] + ((s.x[1] - s.x[0]) * i) / (s.points - 1);
-          for (let k = 1; k < s.answer.length; k++) {
-            const a = s.answer[k - 1], b = s.answer[k];
-            if (x >= a[0] && x <= b[0]) {
-              const want = b[0] === a[0] ? a[1] : a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0]);
-              sum += Math.abs(y - want);
-              n++;
-              break;
-            }
-          }
-        });
-        return n ? sum / n : null;
+      // what everyone starts from: the known data, or the start point
+      function sketchGiven(s) {
+        const { XV, Y } = sketchScales(s);
+        const dot = (p) => `<circle class="known-dot" cx="${XV(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="12"/>`;
+        if (Array.isArray(s.known) && s.known.length) {
+          return (s.known.length > 1 ? sketchPath(s.known, s, "known") : "") + s.known.map(dot).join("");
+        }
+        return Array.isArray(s.start) ? dot(s.start) : "";
       }
 
       function drawSketch(id, curve, truth) {
         const s = cfg.sketches[id];
         const svg = document.getElementById("sketchSvg");
         if (!svg) return;
-        svg.innerHTML = sketchAxes(s) + (truth ? sketchTruth(s) : "") + sketchLines(curve, s, "mine");
+        svg.innerHTML = sketchAxes(s) + (truth ? sketchPath(s.answer, s, "truth") : "") +
+          sketchLines(curve, s, "mine") + sketchGiven(s);
       }
 
       function displaySketch(id) {
         const s = cfg.sketches[id];
+        const anchor = SKM.anchor(s);
         pollContent.innerHTML = `
           <div class="poll-question">${esc(s.question)}</div>
           <div class="sketch-frame" id="sketchFrame">
-            <svg id="sketchSvg" viewBox="0 0 ${SK.w} ${SK.h}"></svg>
+            <svg id="sketchSvg" viewBox="0 0 1000 820"></svg>
           </div>
           <div class="sketch-buttons">
             <button type="button" class="submit secondary" id="sketchClear">Clear</button>
             <button type="button" class="submit" id="sketchSubmit" disabled>Submit</button>
           </div>`;
         const saved = myAnswer(id);
-        let curve = saved || new Array(s.points).fill(null);
+        let curve = saved || SKM.blank(s);
         drawSketch(id, curve);
         if (saved) {
           disableInputs();
@@ -1756,39 +1770,44 @@
           note("✅ Your sketch has been recorded.");
           return;
         }
+        const prompt = anchor ? "Continue the line from the dot" : "Draw your guess across the chart";
         const svg = document.getElementById("sketchSvg");
         const submit = document.getElementById("sketchSubmit");
-        let last = null; // the index drawn last in this stroke
-        // where a touch is, as an index along x and a value on y
+        let last = null; // the point drawn last in this stroke
+        // where a touch is, as an index along x and a value on y; never
+        // before where drawing starts
         const at = (evt) => {
           const box = svg.getBoundingClientRect();
-          const { pw, ph } = sketchScales(s);
+          const { SK, pw, ph } = sketchScales(s);
           const px = ((evt.clientX - box.left) / box.width) * SK.w;
           const py = ((evt.clientY - box.top) / box.height) * SK.h;
           const i = Math.round(((px - SK.l) / pw) * (s.points - 1));
-          const y = s.y[0] + (1 - (py - SK.t) / ph) * (s.y[1] - s.y[0]);
-          return { i: Math.max(0, Math.min(s.points - 1, i)), y: Math.max(s.y[0], Math.min(s.y[1], y)) };
+          const first = anchor ? anchor.i + 1 : 0;
+          return { i: Math.max(first, Math.min(s.points - 1, i)), y: SKM.yAt(s, 1 - (py - SK.t) / ph) };
+        };
+        // straight from a to b (in the axis's terms, so straight on a log axis)
+        const fill = (a, b) => {
+          const step = b.i > a.i ? 1 : -1;
+          for (let i = a.i + step; i !== b.i; i += step) {
+            const t = (i - a.i) / (b.i - a.i);
+            curve[i] = SKM.yAt(s, SKM.sy(s, a.y) + t * (SKM.sy(s, b.y) - SKM.sy(s, a.y)));
+          }
         };
         const paint = (evt) => {
           const p = at(evt);
-          // a fast stroke skips columns: fill them in on a straight line
-          if (last && last.i !== p.i) {
-            const step = p.i > last.i ? 1 : -1;
-            for (let i = last.i + step; i !== p.i; i += step) {
-              curve[i] = last.y + ((p.y - last.y) * (i - last.i)) / (p.i - last.i);
-            }
-          }
+          if (last && last.i !== p.i) fill(last, p);
           curve[p.i] = p.y;
           last = p;
           drawSketch(id, curve);
-          const drawn = curve.filter((v) => v !== null).length;
-          submit.disabled = drawn < 2;
-          if (drawn >= 2) updateStatus("Redraw any part, or submit", "connected");
+          const enough = SKM.drawn(s, curve) >= (anchor ? 1 : 2);
+          submit.disabled = !enough;
+          if (enough) updateStatus("Redraw any part, or submit", "connected");
         };
         svg.addEventListener("pointerdown", (evt) => {
           if (hasVoted(id)) return;
           svg.setPointerCapture(evt.pointerId);
-          last = null;
+          // the first stroke after the dot joins on to it
+          last = anchor && SKM.drawn(s, curve) === 0 ? { i: anchor.i, y: anchor.y } : null;
           paint(evt);
         });
         svg.addEventListener("pointermove", (evt) => {
@@ -1796,10 +1815,10 @@
         });
         svg.addEventListener("pointerup", () => (last = null));
         document.getElementById("sketchClear").addEventListener("click", () => {
-          curve = new Array(s.points).fill(null);
+          curve = SKM.blank(s);
           submit.disabled = true;
           drawSketch(id, curve);
-          updateStatus("Draw your guess across the chart", "connected");
+          updateStatus(prompt, "connected");
         });
         submit.addEventListener("click", () => {
           if (!requireJoined() || !isOpen() || hasVoted(id)) return;
@@ -1809,7 +1828,7 @@
           disableInputs();
           updateStatus("Thanks — your sketch was sent", "connected");
         });
-        updateStatus("Draw your guess across the chart", "connected");
+        updateStatus(prompt, "connected");
       }
 
       /* ------------------------------------------------------- answers */
@@ -1858,15 +1877,14 @@
           const s = cfg.sketches[id];
           if (!Array.isArray(s.answer)) return;
           const mine = myAnswer(id);
-          drawSketch(id, mine || new Array(s.points).fill(null), true);
+          drawSketch(id, mine || SKM.blank(s), true);
           text = "the dashed green line";
           if (mine) {
-            const off = sketchError(mine, s);
-            // an average distance: one decimal from 10 up, two below
-            const roughly = off === null ? "—" : numberText(Math.round(off * (off >= 10 ? 10 : 100)) / (off >= 10 ? 10 : 100));
-            verdict = off !== null && off <= s.tolerance
-              ? '<div class="verdict right">✅ Close: you were off by ' + esc(roughly) + " on average</div>"
-              : '<div class="verdict wrong">❌ Off by ' + esc(roughly) + " on average</div>";
+            const off = SKM.error(mine, s);
+            const by = esc(SKM.errorText(s, off));
+            verdict = SKM.close(mine, s)
+              ? `<div class="verdict right">✅ Close: you were off by ${by} on average</div>`
+              : `<div class="verdict wrong">❌ Off by ${by} on average</div>`;
           }
         } else if (kind === "hotspot") {
           const h = cfg.hotspots[id];

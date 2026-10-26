@@ -868,38 +868,148 @@ end
 -- Draw your guess: each phone draws a curve over the x range, sent as
 -- `points` y-values at evenly spaced x (null where nothing was drawn). The
 -- deck overlays every curve with the class's median, and the answer (the real
--- data, answer="x:y, x:y, ...") as the answer step.
+-- data, answer="x:y, x:y, ...") as the answer step. sketch.js has the maths
+-- the deck and the phones share; README "Draw your guess" lists the options.
+local SKETCH_SHOW = { both = true, median = true, curves = true }
+
+local function sketch_points(id, key, text)
+  if not text then return nil end
+  local pts = {}
+  for px, py in text:gmatch("(-?[%d.]+)%s*:%s*(-?[%d.]+)") do
+    pts[#pts + 1] = { tonumber(px), tonumber(py) }
+  end
+  table.sort(pts, function(p, q) return p[1] < q[1] end)
+  if #pts == 0 then
+    quarto.log.warning("livepoll: sketch '" .. id .. "' " .. key .. " should be \"x:y\" points, e.g. \"20:250, 80:450\"; ignored.")
+    return nil
+  end
+  return pts
+end
+
 local function collect_sketch(el)
   if not el.classes:includes("sketch") then return nil end
   local id = settle_id(el, "sketch")
   local a = el.attributes
+  local function warn(text) quarto.log.warning("livepoll: sketch '" .. id .. "' " .. text) end
   local x, y = range_attr(a.x), range_attr(a.y)
   if not x or not y then
-    quarto.log.warning("livepoll: sketch '" .. id .. "' needs x=\"min,max\" and y=\"min,max\" (min < max); skipping.")
+    warn("needs x=\"min,max\" and y=\"min,max\" (min < max); skipping.")
     return nil
   end
   local question, show = question_of(el, id)
+
+  -- x-scale / y-scale: linear (default) or log, which needs a positive range
+  local function scale(axis, range)
+    local v = a[axis .. "-scale"]
+    if v == nil or v == "linear" then return "linear" end
+    if v ~= "log" then
+      warn(axis .. "-scale should be linear or log, got '" .. v .. "'; using linear.")
+      return "linear"
+    end
+    if range[1] <= 0 then
+      warn(axis .. "-scale=\"log\" needs a range above 0; using linear.")
+      return "linear"
+    end
+    return "log"
+  end
+  local x_scale, y_scale = scale("x", x), scale("y", y)
+  local function within(p, what)
+    if p[1] < x[1] or p[1] > x[2] or p[2] < y[1] or p[2] > y[2] then
+      warn(what .. " " .. tostring(p[1]) .. ":" .. tostring(p[2]) .. " is outside the axes; ignored.")
+      return false
+    end
+    return true
+  end
+
   local points = math.floor(tonumber(a.points or "") or 40)
   if points < 10 or points > 100 then points = 40 end
-  local answer = nil
-  if a.answer then
-    answer = {}
-    for px, py in a.answer:gmatch("(-?[%d.]+)%s*:%s*(-?[%d.]+)") do
-      answer[#answer + 1] = { tonumber(px), tonumber(py) }
-    end
-    table.sort(answer, function(p, q) return p[1] < q[1] end)
-    if #answer < 2 then
-      quarto.log.warning("livepoll: sketch '" .. id .. "' answer should be at least two \"x:y\" points, e.g. \"20:250, 80:450\"; ignored.")
-      answer = nil
+
+  local answer = sketch_points(id, "answer", a.answer)
+  if answer and #answer < 2 then
+    warn("answer needs at least two \"x:y\" points; ignored.")
+    answer = nil
+  end
+
+  -- where drawing starts: start="x:y", or the end of known="x:y, ..." (the
+  -- part of the real data shown from the outset)
+  local known = sketch_points(id, "known", a.known)
+  if known then
+    for _, p in ipairs(known) do
+      if not within(p, "known point") then known = nil break end
     end
   end
-  -- tolerance="40" (y units) or "10%" (of the y range, the default): how far
-  -- off a curve may be on average and still count as right in a quiz
-  local tolerance = (y[2] - y[1]) * 0.1
+  local start = nil
+  if a.start then
+    local pts = sketch_points(id, "start", a.start)
+    if pts and #pts == 1 and within(pts[1], "start") then start = pts[1]
+    elseif pts and #pts ~= 1 then warn("start should be one \"x:y\" point; ignored.") end
+    if start and known then
+      warn("has both start and known: drawing starts where known ends.")
+      start = nil
+    end
+  end
+
+  -- tolerance: how far off a curve may be on average and still count as
+  -- close, as a share of the y axis (as drawn: on a log axis, of its decades)
+  local tolerance = 0.1
   if a.tolerance then
     local pct = a.tolerance:match("^%s*([%d.]+)%s*%%%s*$")
-    tolerance = pct and (y[2] - y[1]) * tonumber(pct) / 100 or tonumber(a.tolerance) or tolerance
+    if pct then
+      tolerance = tonumber(pct) / 100
+    elseif y_scale == "log" then
+      warn("on a log y axis, tolerance must be a percentage of the axis (e.g. \"10%\"); using 10%.")
+    elseif tonumber(a.tolerance) then
+      tolerance = tonumber(a.tolerance) / (y[2] - y[1])
+    else
+      warn("tolerance should be a number in y units or a percentage; using 10%.")
+    end
   end
+
+  local function positive(key)
+    local v = a[key]
+    if v == nil then return nil end
+    local n = tonumber(v)
+    if n and n > 0 then return n end
+    warn(key .. " should be a positive number; ignored.")
+    return nil
+  end
+  local function decimals(key)
+    local v = a[key]
+    if v == nil then return nil end
+    local n = tonumber(v)
+    if n and n >= 0 and n <= 6 and n == math.floor(n) then return n end
+    warn(key .. " should be a whole number from 0 to 6; ignored.")
+    return nil
+  end
+  local x_labels = nil
+  if a["x-labels"] then
+    x_labels = {}
+    for label in a["x-labels"]:gmatch("[^|]+") do x_labels[#x_labels + 1] = label:match("^%s*(.-)%s*$") end
+  end
+
+  local view = a.show or "both"
+  if not SKETCH_SHOW[view] then
+    warn("show should be both, median or curves; using both.")
+    view = "both"
+  end
+  local band = a.band or "50"
+  if band == "none" or band == "0" or band == "false" then band = 0
+  elseif band == "50" or band == "80" then band = tonumber(band)
+  else
+    warn("band should be 50, 80 or none; using 50.")
+    band = 50
+  end
+
+  -- hide-until-reveal="true" is results="hidden": the class's curves stay
+  -- under the veil until the answer (or the results step)
+  if truthy(a["hide-until-reveal"]) then el.attributes["results"] = "hidden" end
+
+  -- the look: the chart's text, grid and font size fall back on the deck's
+  -- `livepoll: chart:`, as a poll's chart does; curve and answer colours and
+  -- the height are the sketch's own
+  local height = a.height
+  if height and tonumber(height) then height = height .. "px" end
+
   warn_layout(el, id)
   read_timer(el, id)
   record_in(sketches, sketch_order, id, {
@@ -907,11 +1017,34 @@ local function collect_sketch(el)
     show_question = show,
     x = x,
     y = y,
+    x_scale = x_scale,
+    y_scale = y_scale,
     x_label = a["x-label"],
     y_label = a["y-label"],
+    x_ticks = x_scale == "linear" and positive("x-ticks") or nil,
+    y_ticks = y_scale == "linear" and positive("y-ticks") or nil,
+    x_unit = a["x-unit"],
+    y_unit = a["y-unit"],
+    x_decimals = decimals("x-decimals"),
+    y_decimals = decimals("y-decimals"),
+    x_labels = x_labels,
     points = points,
     answer = answer,
+    known = known,
+    start = start,
     tolerance = tolerance,
+    view = view,
+    band = band,
+    -- the sketch's own; sketch_html adds the deck's chart: defaults, which
+    -- are only read (with the metadata) after this pass
+    look = {
+      color = a.color,
+      ["grid-color"] = a["grid-color"],
+      ["font-size"] = a["font-size"],
+      ["line-color"] = a["line-color"],
+      ["answer-color"] = a["answer-color"],
+      height = height,
+    },
     results = results_attr(el, id),
     qr = truthy(a.qr) ~= false,
   })
@@ -1694,7 +1827,26 @@ local function sketch_html(id, side)
   }
   if k.show_question or not side then out[#out + 1] = question_html(id, k.question) end
   -- drawn by questions.js: axes, every curve, the median and its band, the answer
-  out[#out + 1] = '<div class="lp-sketch" data-sketch="' .. eid .. '"><svg class="lp-sketch-plot"></svg>'
+  -- the look, as CSS custom properties (livepoll.css): the sketch's own
+  -- settings, else the deck's `livepoll: chart:`
+  local look = k.look
+  local font = look["font-size"] or chart_defaults["font-size"]
+  if font and tonumber(font) then font = font .. "px" end
+  local style = {}
+  for _, pair in ipairs({
+    { "--lp-sk-text", look.color or chart_defaults["color"] },
+    { "--lp-sk-grid", look["grid-color"] or chart_defaults["grid-color"] },
+    { "--lp-sk-font", font },
+    { "--lp-sk-line", look["line-color"] },
+    { "--lp-sk-answer", look["answer-color"] },
+    { "height", look.height },
+  }) do
+    if pair[2] then style[#style + 1] = pair[1] .. ":" .. pair[2] end
+  end
+  if look.height then style[#style + 1] = "flex:none" end
+  out[#out + 1] = '<div class="lp-sketch" data-sketch="' .. eid .. '"'
+    .. (#style > 0 and (' style="' .. html_escape(table.concat(style, ";")) .. '"') or "")
+    .. '><svg class="lp-sketch-plot"></svg>'
     .. '<p class="lp-empty">Waiting for sketches…</p></div>'
   out[#out + 1] = '<div class="lp-veil">Results hidden</div>'
   out[#out + 1] = "</div>"
@@ -2310,8 +2462,11 @@ local function emit(doc)
   local published_sketches = {}
   for id, k in pairs(sketches) do
     published_sketches[id] = {
-      question = k.question, x = k.x, y = k.y, xLabel = k.x_label, yLabel = k.y_label,
-      points = k.points, answer = k.answer, tolerance = k.tolerance,
+      question = k.question, x = k.x, y = k.y, xScale = k.x_scale, yScale = k.y_scale,
+      xLabel = k.x_label, yLabel = k.y_label, xTicks = k.x_ticks, yTicks = k.y_ticks,
+      xUnit = k.x_unit, yUnit = k.y_unit, xDecimals = k.x_decimals, yDecimals = k.y_decimals,
+      xLabels = k.x_labels, points = k.points, answer = k.answer, known = k.known,
+      start = k.start, tolerance = k.tolerance, show = k.view, band = k.band,
     }
   end
   for id, cloud in pairs(clouds) do
@@ -2374,9 +2529,9 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "2.0.7",
+    version = "2.0.8",
     -- livepoll.js first: the others build on window.Livepoll
-    scripts = { "qrcode.js", "livepoll.js", "filter.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
+    scripts = { "qrcode.js", "livepoll.js", "filter.js", "timer.js", "sketch.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
     stylesheets = { "livepoll.css" },
   })
 

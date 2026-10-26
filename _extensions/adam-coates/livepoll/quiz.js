@@ -138,8 +138,7 @@
       // close enough on average to the real data, where the two overlap
       var k = (cfg.sketches || {})[id];
       if (!k || !Array.isArray(k.answer)) return null;
-      var off = LP.sketchError(value, k);
-      return off !== null && off <= k.tolerance + 1e-9;
+      return window.LivepollSketch.close(value, k);
     }
     return null;
   }

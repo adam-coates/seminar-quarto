@@ -3,10 +3,10 @@
 const { sleep, launch, openHost, openPhone, gotoSlide, check } = require("./lib");
 
 // Draws y = f(share of the way along x) on the phone's chart, whose box and
-// margins (SK) come from the page; this question's y runs 200..600.
+// margins (sketchBox) come from the page; this question's y runs 200..600.
 async function draw(p, f) {
   const r = await p.$eval("#sketchSvg", (s) => { const b = s.getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; });
-  const k = await p.evaluate(() => SK);
+  const k = await p.evaluate(() => sketchBox(cfg.sketches[active.id]));
   const pw = k.w - k.l - k.r, ph = k.h - k.t - k.b;
   const at = (fx) => ({
     x: r.l + ((k.l + pw * fx) / k.w) * r.w,

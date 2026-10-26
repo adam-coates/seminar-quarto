@@ -32,3 +32,15 @@ livepoll:
 ::: {.sketch #rt x="20,80" y="200,600" x-label="Age" y-label="Reaction time (ms)" answer="20:250, 40:280, 60:340, 80:450"}
 How does reaction time change with age?
 :::
+
+## Sketch with options
+
+::: {.sketch #growth x="0,6" y="10,10000" y-scale="log" x-labels="Mon|Tue|Wed|Thu|Fri|Sat|Sun" y-unit="users" start="0:10" answer="0:10, 3:300, 6:8000" show="median" band="80" hide-until-reveal="true" line-color="#d33" answer-color="#06c" height="380px" font-size="18"}
+How many users by Sunday?
+:::
+
+## Sketch from known data
+
+::: {.sketch #known x="0,10" y="0,100" known="0:5, 2:40" answer="0:5, 2:40, 6:76, 10:90" show="curves" band="none" y-ticks="25" y-decimals="1" y-unit="%"}
+Continue the curve.
+:::

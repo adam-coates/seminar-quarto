@@ -92,8 +92,9 @@ project:
 ```
 
 (Without a project, copy `_extensions/adam-coates/livepoll/poll.html` next to
-the rendered deck yourself, along with `vendor/socket.io.min.js` from the same
-folder, renamed `livepoll-socket.io.min.js`.)
+the rendered deck yourself, along with two files from the same folder:
+`vendor/socket.io.min.js`, renamed `livepoll-socket.io.min.js`, and
+`sketch.js`, renamed `livepoll-sketch.js`.)
 
 Everything the deck and `poll.html` load is served with the extension: the
 socket.io client, Chart.js and the poll stylesheet are bundled in
@@ -309,13 +310,54 @@ bold line and a band for the middle half of the answers. `answer="x:y, …"` is
 the real data, drawn as a dashed line when the answer is revealed, with how
 many curves came close; each phone then sees its own curve against it.
 
+**Axes**
+
 | attribute | default | meaning |
 | --- | --- | --- |
 | `x`, `y` | (required) | the axes' ranges, `"min,max"` |
+| `x-scale`, `y-scale` | `linear` | `log` for a logarithmic axis (its range must be above 0); phones draw on the same axes |
 | `x-label`, `y-label` | | axis titles |
-| `answer` | | the real data as `x:y` points, joined by straight lines |
-| `tolerance` | `10%` | how far off a curve may be on average and still count as close (and score, in a quiz): in y units, or `%` of the y range |
+| `x-labels` | | names for evenly spaced positions along x instead of numbers, e.g. `"Mon\|Tue\|Wed"` |
+| `x-ticks`, `y-ticks` | about five | the step between ticks on a linear axis (a log axis ticks its powers of ten) |
+| `x-unit`, `y-unit` | | a unit after each tick and in the phones' verdicts: `"ms"` → `200 ms`, `"%"` → `20%` |
+| `x-decimals`, `y-decimals` | as needed | decimals on the ticks, 0–6 |
+
+**The real data and scoring**
+
+| attribute | default | meaning |
+| --- | --- | --- |
+| `answer` | | the real data as `x:y` points, joined by straight lines (straight on the axes as drawn, so on a log axis too) |
+| `tolerance` | `10%` | how far off a curve may be on average and still count as close (and score, in a quiz): a percentage of the y axis, or a number in y units on a linear axis |
+| `start` | | `x:y`: drawing starts from this point, shown as a dot, so everyone continues from the same place |
+| `known` | | `x:y` points of the real data shown from the outset; people draw the rest, from where it ends |
 | `points` | `40` | how many x positions a curve is sampled at (10–100) |
+
+**What the class sees**
+
+| attribute | default | meaning |
+| --- | --- | --- |
+| `show` | `both` | `curves` (every curve, no median), `median` (the median alone, for a large room) or both |
+| `band` | `50` | the shaded band around the median: the middle `50` or `80` per cent of curves, or `none` |
+| `hide-until-reveal` | `false` | keep the class's curves hidden until the answer (the same as `results="hidden"`), so nobody copies the room |
+
+**Look**
+
+| attribute | default | meaning |
+| --- | --- | --- |
+| `height` | fills the slide | the chart's height, e.g. `"380px"` |
+| `line-color` | the theme's link colour | the curves, median and band |
+| `answer-color` | green | the real data and the "close" count |
+| `color`, `grid-color`, `font-size` | the deck's `livepoll: chart:` | text colour, grid lines and tick size, as for the other charts |
+
+A curve is scored only on what was drawn: with `start` or `known`, the part
+everyone was given doesn't count. On a log y axis "how far off" is a factor,
+and the phones say so ("off by a factor of 1.6").
+
+```markdown
+::: {.sketch #users x="0,6" y="10,10000" y-scale="log" x-labels="Mon|Tue|Wed|Thu|Fri|Sat|Sun" y-unit="users" start="0:10" answer="0:10, 3:300, 6:8000" show="median" hide-until-reveal="true"}
+How many users will we have by Sunday?
+:::
+```
 
 Estimates, rankings, hotspots and sketches are always drawn in the embedded
 layout, and a `.poll-results for="…"` div draws one on another slide.

@@ -1,6 +1,6 @@
 title: Livepoll
 author: Adam Coates
-version: 2.0.7
+version: 2.0.8
 quarto-required: ">=1.4.0"
 contributes:
   filters:
