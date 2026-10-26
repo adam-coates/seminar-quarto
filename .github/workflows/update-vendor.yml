@@ -1,0 +1,46 @@
+# Weekly check for new releases of the JavaScript libraries bundled in
+# _extensions/adam-coates/livepoll/vendor/. When there are any, it opens (or
+# updates) a pull request with the new files; nothing changes until you merge.
+#
+# Needs: Settings > Actions > General > "Allow GitHub Actions to create and
+# approve pull requests".
+name: Update vendored JS libraries
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  workflow_dispatch: # or run it by hand from the Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: update
+        run: bash .github/scripts/update-vendor.sh
+
+      - if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: vendor-updates
+          delete-branch: true
+          commit-message: Update vendored JS libraries
+          title: Update vendored JS libraries
+          body: |
+            New releases of the libraries bundled with livepoll:
+
+            ${{ steps.update.outputs.summary }}
+
+            Before merging, render a deck and try a poll from a phone (the
+            socket.io client talks to the relay server), plus a chart slide.
+            The licence texts in `vendor/README.md` are not updated
+            automatically; check them if a package changed its licence.
