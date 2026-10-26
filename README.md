@@ -677,4 +677,4 @@ update arrives as a pull request with the tests already run on it.
 ## License
 
 MIT, see [LICENSE](LICENSE). Some files are by other authors, also under the
-MIT License; LICENSE lists them.
+MIT License; [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists them.
