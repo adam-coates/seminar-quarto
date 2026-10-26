@@ -337,15 +337,22 @@ filter's say-so:
 - a flagged **question** waits for **Approve**, as with `qa: moderated`;
 - a flagged **nickname** is replaced with a neutral "Player N".
 
-The participant isn't told a word was held. The filter uses bundled English
-and German word lists, matches whole words only (so "Scunthorpe" and
-"assessment" pass), and sees through capitals, accents, look-alikes (`sh1t`,
-`a$$`), masking (`f*ck`) and stretched letters (`fuuuck`).
+The participant isn't told a word was held. The filter matches whole words
+only (so "Scunthorpe" and "assessment" pass), and sees through capitals,
+accents, look-alikes (`sh1t`, `a$$`), masking (`f*ck`) and stretched letters
+(`fuuuck`).
+
+The word lists (English and German, from
+[LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words),
+CC BY 4.0) are not part of this repository. Rendering downloads them from a
+pinned commit, checks them, and builds them into the deck, so presenting
+contacts no one. Rendering therefore needs internet; offline, Quarto warns and
+the filter uses only your `blocked-words`.
 
 ```yaml
 livepoll:
   filter: true                 # default; false turns it off
-  filter-languages: [en, de]   # the bundled lists to use
+  filter-languages: [en, de]   # which word lists to use
   blocked-words: [Kevin]       # your additions
   allowed-words: [Dick, penis] # let these through
   wordcloud: moderated         # hold every word for approval
@@ -540,7 +547,7 @@ Other options under `livepoll:`:
 | `qa` | `true` | audience questions; `moderated` to approve each, `false` for none |
 | `wordcloud` | `true` | `moderated` to approve each word-cloud word |
 | `filter` | `true` | the [word filter](#word-filter) for words, questions and nicknames |
-| `filter-languages` | `[en, de]` | which bundled word lists the filter uses |
+| `filter-languages` | `[en, de]` | which word lists the filter uses (downloaded at render time) |
 | `blocked-words` | | words to flag besides the lists |
 | `allowed-words` | | words never to flag |
 | `signals` | `false` | the "Lost me" / "Slow down" buttons |
