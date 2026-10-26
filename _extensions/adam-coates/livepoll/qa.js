@@ -8,7 +8,8 @@
 ** (spotlight). A `.qa` slide shows the board, most upvoted first.
 **
 ** `livepoll: qa: moderated` holds each question back until it is approved;
-** `qa: false` turns the whole thing off.
+** `qa: false` turns the whole thing off. Either way, a question the word
+** filter flags (filter.js) is held back for approval too.
 ******************************************************************/
 
 (function () {
@@ -90,12 +91,14 @@
       if (questions[i].who === who && questions[i].text === text) return; // sent twice
     }
     asked[who] = (asked[who] || 0) + 1;
+    var flagged = LP.filter.flags(text);
     var q = {
       id: "q" + (questions.length + 1),
       text: text,
       votes: 0,
       voters: {},
-      status: mode() === "moderated" ? "pending" : "open",
+      status: mode() === "moderated" || flagged ? "pending" : "open",
+      flagged: flagged,
       t: Date.now(),
       who: who,
     };
@@ -276,7 +279,7 @@
               '<button type="button" data-act="hide" title="Remove from the board">✕</button>';
             return (
               '<div class="livepoll-qa-item" data-status="' + q.status + '" data-id="' + q.id + '">' +
-              '<span class="livepoll-qa-votes">▲' + q.votes + "</span>" +
+              '<span class="livepoll-qa-votes">' + (q.flagged ? '<span title="Matched the word filter">⚠</span>' : "") + "▲" + q.votes + "</span>" +
               '<span class="livepoll-qa-text">' + LP.escape(q.text) + "</span>" +
               '<span class="livepoll-qa-actions">' + actions + "</span></div>"
             );
@@ -297,7 +300,11 @@
       "Questions",
       '<div class="livepoll-qa-list"></div><p class="livepoll-hint livepoll-qa-hidden"></p>' +
         '<p class="livepoll-hint">' +
-        (mode() === "moderated" ? "Questions wait for your approval before anyone sees them. " : "") +
+        (mode() === "moderated"
+          ? "Questions wait for your approval before anyone sees them. "
+          : LP.filter.on()
+            ? "Questions the word filter flags (⚠) wait for your approval. "
+            : "") +
         "Participants ask and upvote in the Questions tab of the poll page.</p>"
     );
     panel.addEventListener("click", function (evt) {
