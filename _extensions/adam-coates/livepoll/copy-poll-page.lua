@@ -2,9 +2,10 @@
 --
 -- The QR code on a deck points at poll.html in the deck's own folder, and the
 -- page reads its configuration out of the deck, so each rendered deck needs a
--- copy next to it, along with the socket.io client it loads
+-- copy next to it, along with the scripts it loads: the socket.io client
 -- (livepoll-socket.io.min.js, from vendor/: no CDN, so phones contact no third
--- party). Run it as a project post-render script:
+-- party) and the sketch maths it shares with the deck (livepoll-sketch.js).
+-- Run it as a project post-render script:
 --
 --     project:
 --       post-render:
@@ -28,6 +29,7 @@ end
 local files = {
   ["poll.html"] = "poll.html",
   ["livepoll-socket.io.min.js"] = "vendor/socket.io.min.js",
+  ["livepoll-sketch.js"] = "sketch.js",
 }
 local contents = {}
 for target, source in pairs(files) do

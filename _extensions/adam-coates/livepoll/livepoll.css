@@ -1489,61 +1489,81 @@
   text-align: center;
 }
 
+/* the look, set per sketch (or deck-wide by `livepoll: chart:`) as custom
+   properties on .lp-sketch by livepoll.lua */
+.reveal .lp-sketch {
+  color: var(--lp-sk-text, currentColor);
+}
+
 .reveal .lp-sketch .lp-sk-grid {
-  stroke: color-mix(in srgb, currentColor 12%, transparent);
+  stroke: var(--lp-sk-grid, color-mix(in srgb, currentColor 12%, transparent));
   stroke-width: 1;
 }
 
 .reveal .lp-sketch .lp-sk-tick {
   fill: currentColor;
-  opacity: 0.65;
-  font-size: 15px;
+  opacity: 0.7;
+  font-size: var(--lp-sk-font, 15px);
 }
 
 .reveal .lp-sketch .lp-sk-label {
   fill: currentColor;
-  font-size: 17px;
+  font-size: calc(var(--lp-sk-font, 15px) * 1.13);
   font-weight: 600;
 }
 
 .reveal .lp-sketch .lp-sk-curve {
   fill: none;
-  stroke: var(--lp-accent, #3b6fd4);
+  stroke: var(--lp-sk-line, var(--lp-accent, #3b6fd4));
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
 .reveal .lp-sketch .lp-sk-band {
-  fill: color-mix(in srgb, var(--lp-accent, #3b6fd4) 18%, transparent);
+  fill: color-mix(in srgb, var(--lp-sk-line, var(--lp-accent, #3b6fd4)) 18%, transparent);
   stroke: none;
 }
 
 .reveal .lp-sketch .lp-sk-median {
   fill: none;
-  stroke: var(--lp-accent, #3b6fd4);
+  stroke: var(--lp-sk-line, var(--lp-accent, #3b6fd4));
   stroke-width: 5;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
+/* the data everyone starts from (known=, start=): solid, in the text colour */
+.reveal .lp-sketch .lp-sk-known {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linejoin: round;
+}
+
+.reveal .lp-sketch .lp-sk-known-dot {
+  fill: currentColor;
+  stroke: #fff;
+  stroke-width: 2;
+}
+
 .reveal .lp-sketch .lp-sk-answer {
   fill: none;
-  stroke: var(--lp-good);
+  stroke: var(--lp-sk-answer, var(--lp-good));
   stroke-width: 5;
   stroke-dasharray: 10 6;
 }
 
 .reveal .lp-sketch .lp-sk-answer-dot {
-  fill: var(--lp-good);
+  fill: var(--lp-sk-answer, var(--lp-good));
   stroke: #fff;
   stroke-width: 2;
 }
 
 .reveal .lp-sketch .lp-sk-score {
-  fill: var(--lp-good);
+  fill: var(--lp-sk-answer, var(--lp-good));
   font-weight: 800;
-  font-size: 18px;
+  font-size: calc(var(--lp-sk-font, 15px) * 1.2);
   paint-order: stroke;
   stroke: #fff;
   stroke-width: 4px;
