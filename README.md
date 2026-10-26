@@ -91,7 +91,30 @@ project:
 ```
 
 (Without a project, copy `_extensions/adam-coates/livepoll/poll.html` next to
-the rendered deck yourself.)
+the rendered deck yourself, along with `vendor/socket.io.min.js` from the same
+folder, renamed `livepoll-socket.io.min.js`.)
+
+Everything the deck and `poll.html` load is served with the extension: the
+socket.io client, Chart.js and the poll stylesheet are bundled in
+`_extensions/adam-coates/livepoll/vendor/` (sources and licences in its
+README). Nothing livepoll loads comes from a CDN, so participants' browsers
+contact only the server hosting the slides and your relay server. That keeps
+their IP addresses away from third parties, and polls keep working on a
+network without internet access.
+
+Quarto itself is the exception, in the deck (not in `poll.html`): reveal.js
+output loads MathJax from jsDelivr even when the deck contains no maths. Turn
+that off in decks without maths, or point it at a local copy of MathJax 2.7:
+
+```yaml
+format:
+  revealjs:
+    html-math-method: plain           # no maths in this deck
+    # or, with maths:
+    # html-math-method:
+    #   method: mathjax
+    #   url: "mathjax/MathJax.js"     # served beside the deck
+```
 
 Then enable it in the deck:
 
@@ -615,7 +638,7 @@ static host.
 ## Browser caching
 
 Quarto serves extension files from a fixed path that includes the extension's
-version (`livepoll-2.0.3/`), with no cache-busting. If you change the
+version (`livepoll-2.0.4/`), with no cache-busting. If you change the
 extension's CSS or JavaScript, bump `version` in `livepoll.lua`'s
 `add_html_dependency` call, or browsers that have seen the old files keep
 using them.

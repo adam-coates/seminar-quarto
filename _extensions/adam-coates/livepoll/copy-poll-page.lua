@@ -2,7 +2,9 @@
 --
 -- The QR code on a deck points at poll.html in the deck's own folder, and the
 -- page reads its configuration out of the deck, so each rendered deck needs a
--- copy next to it. Run it as a project post-render script:
+-- copy next to it, along with the socket.io client it loads
+-- (livepoll-socket.io.min.js, from vendor/: no CDN, so phones contact no third
+-- party). Run it as a project post-render script:
 --
 --     project:
 --       post-render:
@@ -22,10 +24,18 @@ local function read(path)
   return data
 end
 
-local page = read(here .. "poll.html")
-if not page then
-  io.stderr:write("livepoll: poll.html not found next to copy-poll-page.lua\n")
-  os.exit(1)
+-- each file poll.html needs, by the name it has beside the deck
+local files = {
+  ["poll.html"] = "poll.html",
+  ["livepoll-socket.io.min.js"] = "vendor/socket.io.min.js",
+}
+local contents = {}
+for target, source in pairs(files) do
+  contents[target] = read(here .. source)
+  if not contents[target] then
+    io.stderr:write("livepoll: " .. source .. " not found next to copy-poll-page.lua\n")
+    os.exit(1)
+  end
 end
 
 local outputs = os.getenv("QUARTO_PROJECT_OUTPUT_FILES") or ""
@@ -35,13 +45,15 @@ for path in outputs:gmatch("[^\r\n]+") do
   if name:match("%.html?$") and name ~= "poll.html" then
     local html = read(path)
     if html and html:find('id="livepoll-config"', 1, true) then
-      local target = (dir ~= "" and dir or "./") .. "poll.html"
-      if not copied[target] then
-        local f = assert(io.open(target, "wb"))
-        f:write(page)
-        f:close()
-        copied[target] = true
-        print("livepoll: " .. target)
+      local folder = dir ~= "" and dir or "./"
+      if not copied[folder] then
+        for target, data in pairs(contents) do
+          local f = assert(io.open(folder .. target, "wb"))
+          f:write(data)
+          f:close()
+        end
+        copied[folder] = true
+        print("livepoll: " .. folder .. "poll.html")
       end
     end
   end

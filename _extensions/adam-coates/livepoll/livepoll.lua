@@ -47,22 +47,27 @@
 --       room: "week-01"
 --       hash: "$2a$05$..."
 
--- Note what is deliberately NOT here: reveal.js-plugins@latest/poll/plugin.js.
--- It was, and it quietly won. Both it and this extension's own poll.js open with
+-- Third-party libraries, served from vendor/ rather than a CDN: a CDN request
+-- hands each participant's IP address to the CDN's operator. See
+-- vendor/README.md for where each file came from.
+--
+-- Note what is deliberately NOT here: reveal.js-plugins' poll/plugin.js. It
+-- was once loaded from jsDelivr, and it quietly won. Both it and this
+-- extension's own poll.js open with
 --
 --     window.RevealPoll = window.RevealPoll || { ... }
 --
--- and this block goes into <head>, so the CDN copy was always the one that set
--- the global and the local file — the one with the late-joiner relay, the
--- activate-poll handling and the vote counting — never ran at all. Worse, that
--- was contingent: with jsDelivr slow or blocked the local file won instead, so
--- the deck ran different poll code depending on the room's network. The
--- stylesheet is still wanted; the script is not.
-local cdn = [[
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/poll/style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.2.0/chart.min.js"></script>
-]]
+-- and it went into <head>, so it was always the one that set the global and
+-- the local file — the one with the late-joiner relay, the activate-poll
+-- handling and the vote counting — never ran at all. The stylesheet is still
+-- wanted; the script is not.
+local vendor = {
+  name = "livepoll-vendor",
+  -- socket.io-client 4.8.1, chart.js 3.2.0, reveal.js-plugins 4.6.0
+  version = "4.8.1-3.2.0-4.6.0",
+  scripts = { "vendor/socket.io.min.js", "vendor/chart.min.js" },
+  stylesheets = { "vendor/poll-style.css" },
+}
 
 local LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 local CHECKED = "☒" -- pandoc's rendering of "- [x]"
@@ -2177,7 +2182,7 @@ local function emit(doc)
   -- `</` is escaped so the JSON can never close the <script> element early.
   local json = quarto.json.encode(config):gsub("</", "<\\/")
 
-  quarto.doc.include_text("in-header", cdn)
+  quarto.doc.add_html_dependency(vendor)
   quarto.doc.include_text(
     "in-header",
     '<script type="application/json" id="livepoll-config">' .. json .. "</script>"
@@ -2187,7 +2192,7 @@ local function emit(doc)
     -- Part of the site_libs path. Bump it with any change to these files: the
     -- path has no cache-busting otherwise, and a browser that has seen the old
     -- livepoll.css keeps using it against the new livepoll.js.
-    version = "2.0.3",
+    version = "2.0.4",
     -- livepoll.js first: the others build on window.Livepoll
     scripts = { "qrcode.js", "livepoll.js", "timer.js", "questions.js", "qa.js", "signals.js", "quiz.js" },
     stylesheets = { "livepoll.css" },
